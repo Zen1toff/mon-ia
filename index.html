@@ -3,28 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Air Canvas IA</title>
+    <title>Air Canvas Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #video { position: fixed; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; opacity: 0.5; }
-        #drawCanvas { position: fixed; top: 0; left: 0; z-index: 5; transform: scaleX(-1); }
-        #ui { position: fixed; top: 20px; width: 100%; z-index: 10; display: flex; justify-content: center; gap: 10px; pointer-events: none; }
-        .btn { padding: 10px 20px; background: white; border-radius: 20px; font-weight: bold; pointer-events: auto; }
-        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px; background: #00ffcc; border: none; border-radius: 10px; font-size: 1.2rem; }
+        body { margin: 0; overflow: hidden; background: #000; position: fixed; width: 100vw; height: 100vh; }
+        #video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; opacity: 0.6; }
+        #drawCanvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 5; pointer-events: none; }
+        #ui { position: fixed; top: 10px; width: 100%; z-index: 10; text-align: center; pointer-events: none; }
+        .info { background: rgba(0,0,0,0.8); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; display: inline-block; }
+        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px; background: #00ffcc; border: none; border-radius: 50px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">LANCER LE TABLEAU MAGIQUE</button>
-    
-    <div id="ui">
-        <div class="btn" id="status">En attente...</div>
-        <div class="btn" onclick="clearCanvas()" style="background: #ff4444; color: white;">EFFACER</div>
-    </div>
-
+    <button id="start-btn">ACTIVER LE DESSIN</button>
+    <div id="ui"><div class="info" id="status">En attente...</div></div>
     <video id="video" autoplay playsinline muted></video>
     <canvas id="drawCanvas"></canvas>
 
@@ -38,10 +33,10 @@
 
         async function init() {
             document.getElementById('start-btn').style.display = 'none';
-            
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
             video.srcObject = stream;
 
+            // Ajustement précis du canvas
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
 
@@ -49,43 +44,45 @@
                 handPoseDetection.SupportedModels.MediaPipeHands, 
                 { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands', modelType: 'lite' }
             );
-
-            status.innerText = "Prêt : Pincez pour dessiner !";
+            status.innerText = "IA PRÊTE : PINCEZ FORT !";
             detect();
-        }
-
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
         async function detect() {
             const hands = await detector.estimateHands(video);
-
+            // On efface pas le canvas de dessin, mais on pourrait effacer un curseur temporaire ici
+            
             if (hands && hands.length > 0) {
-                const index = hands[0].keypoints[8];
-                const thumb = hands[0].keypoints[4];
+                const hand = hands[0];
+                const index = hand.keypoints[8];
+                const thumb = hand.keypoints[4];
 
-                // Coordonnées adaptées à l'écran
-                const x = (index.x / video.videoWidth) * canvas.width;
-                const y = (index.y / video.videoHeight) * canvas.height;
+                // CALCUL DES COORDONNÉES (Correction miroir incluse)
+                const x = window.innerWidth - (index.x / video.videoWidth * window.innerWidth);
+                const y = (index.y / video.videoHeight * window.innerHeight);
 
-                // Calcul distance pince
+                // CALCUL DE LA PINCE (Distance entre pouce et index)
                 const dist = Math.sqrt(Math.pow(index.x - thumb.x, 2) + Math.pow(index.y - thumb.y, 2));
 
-                if (dist < 45) {
-                    status.innerText = "✍️ Dessin en cours...";
+                // TEST DE DÉBOGAGE : Si dist < 60 (on augmente la tolérance)
+                if (dist < 60) { 
+                    status.innerText = "DESSIN EN COURS...";
+                    status.style.background = "red";
+                    
                     if (lastPos) {
                         ctx.beginPath();
                         ctx.strokeStyle = "#00ffcc";
-                        ctx.lineWidth = 8;
+                        ctx.lineWidth = 10;
                         ctx.lineCap = "round";
+                        ctx.lineJoin = "round";
                         ctx.moveTo(lastPos.x, lastPos.y);
                         ctx.lineTo(x, y);
                         ctx.stroke();
                     }
                     lastPos = { x, y };
                 } else {
-                    status.innerText = "✋ Main levée (Déplacement)";
+                    status.innerText = "PAS DE PINCE (Dist: " + Math.round(dist) + ")";
+                    status.style.background = "rgba(0,0,0,0.8)";
                     lastPos = null;
                 }
             }
