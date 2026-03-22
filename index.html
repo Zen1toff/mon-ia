@@ -3,93 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Air Canvas Pro</title>
+    <title>IA Object Scanner - AR</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #000; position: fixed; width: 100vw; height: 100vh; }
-        #video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; opacity: 0.6; }
-        #drawCanvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 5; pointer-events: none; }
-        #ui { position: fixed; top: 10px; width: 100%; z-index: 10; text-align: center; pointer-events: none; }
-        .info { background: rgba(0,0,0,0.8); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; display: inline-block; }
-        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px; background: #00ffcc; border: none; border-radius: 50px; font-weight: bold; }
+        #video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; opacity: 0.8; }
+        canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 5; pointer-events: none; }
+        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px 40px; background: #00ffcc; border: none; border-radius: 50px; font-weight: bold; font-size: 1.2rem; box-shadow: 0 0 20px #00ffcc; }
+        #ui { position: fixed; bottom: 30px; width: 100%; z-index: 10; text-align: center; color: white; font-family: sans-serif; pointer-events: none; text-shadow: 2px 2px 4px #000; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER LE DESSIN</button>
-    <div id="ui"><div class="info" id="status">En attente...</div></div>
+    <button id="start-btn">INITIALISER LE SCANNER AR</button>
+    <div id="ui">Placez votre paume face caméra</div>
+    
     <video id="video" autoplay playsinline muted></video>
-    <canvas id="drawCanvas"></canvas>
 
     <script>
+        let scene, camera, renderer, sphere, detector;
         const video = document.getElementById('video');
-        const canvas = document.getElementById('drawCanvas');
-        const ctx = canvas.getContext('2d');
-        const status = document.getElementById('status');
-        let detector;
-        let lastPos = null;
+        const startBtn = document.getElementById('start-btn');
 
         async function init() {
-            document.getElementById('start-btn').style.display = 'none';
+            startBtn.style.display = 'none';
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
             video.srcObject = stream;
 
-            // Ajustement précis du canvas
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            // 1. Setup Three.js
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
 
+            // 2. Création de l'objet 3D (Sphère technologique)
+            const geometry = new THREE.IcosahedronGeometry(1, 4);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.5 });
+            sphere = new THREE.Mesh(geometry, material);
+            scene.add(sphere);
+
+            // Ajout de points lumineux sur la sphère
+            const pointsGeom = new THREE.PointsGeometry().setFromPoints(geometry.attributes.position.array);
+            const pointsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05 });
+            const points = new THREE.Points(geometry, pointsMat);
+            sphere.add(points);
+
+            camera.position.z = 5;
+
+            // 3. Setup MediaPipe
             detector = await handPoseDetection.createDetector(
                 handPoseDetection.SupportedModels.MediaPipeHands, 
                 { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands', modelType: 'lite' }
             );
-            status.innerText = "IA PRÊTE : PINCEZ FORT !";
-            detect();
+
+            animate();
         }
 
-        async function detect() {
+        async function animate() {
             const hands = await detector.estimateHands(video);
-            // On efface pas le canvas de dessin, mais on pourrait effacer un curseur temporaire ici
             
             if (hands && hands.length > 0) {
                 const hand = hands[0];
-                const index = hand.keypoints[8];
-                const thumb = hand.keypoints[4];
+                
+                // Coordonnées du centre de la paume (Point 9 : Base du majeur)
+                const palmCenter = hand.keypoints[9];
+                const wrist = hand.keypoints[0];
 
-                // CALCUL DES COORDONNÉES (Correction miroir incluse)
-                const x = window.innerWidth - (index.x / video.videoWidth * window.innerWidth);
-                const y = (index.y / video.videoHeight * window.innerHeight);
+                // Conversion 2D vers Espace 3D Three.js
+                const x = -(palmCenter.x / video.videoWidth * 10 - 5);
+                const y = -(palmCenter.y / video.videoHeight * 10 - 5);
+                const z = (hand.keypoints3D[9].z * -10); // Profondeur réelle !
 
-                // CALCUL DE LA PINCE (Distance entre pouce et index)
-                const dist = Math.sqrt(Math.pow(index.x - thumb.x, 2) + Math.pow(index.y - thumb.y, 2));
+                sphere.position.set(x, y, z);
 
-                // TEST DE DÉBOGAGE : Si dist < 60 (on augmente la tolérance)
-                if (dist < 60) { 
-                    status.innerText = "DESSIN EN COURS...";
-                    status.style.background = "red";
-                    
-                    if (lastPos) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = "#00ffcc";
-                        ctx.lineWidth = 10;
-                        ctx.lineCap = "round";
-                        ctx.lineJoin = "round";
-                        ctx.moveTo(lastPos.x, lastPos.y);
-                        ctx.lineTo(x, y);
-                        ctx.stroke();
-                    }
-                    lastPos = { x, y };
+                // Rotation basée sur l'orientation de la main
+                sphere.rotation.x += 0.05;
+                sphere.rotation.y += 0.05;
+
+                // Détection POING FERMÉ (Changement d'état)
+                const isFist = Math.abs(hand.keypoints[12].y - hand.keypoints[0].y) < 100;
+                if (isFist) {
+                    sphere.material.color.setHex(0xff0044); // Rouge
+                    sphere.scale.set(0.6, 0.6, 0.6);
                 } else {
-                    status.innerText = "PAS DE PINCE (Dist: " + Math.round(dist) + ")";
-                    status.style.background = "rgba(0,0,0,0.8)";
-                    lastPos = null;
+                    sphere.material.color.setHex(0x00ffcc); // Cyan
+                    sphere.scale.set(1.2, 1.2, 1.2);
                 }
+                
+                sphere.visible = true;
+            } else {
+                sphere.visible = false;
             }
-            requestAnimationFrame(detect);
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
         }
 
-        document.getElementById('start-btn').addEventListener('click', init);
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        startBtn.addEventListener('click', init);
     </script>
 </body>
 </html>
