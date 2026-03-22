@@ -3,77 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AOC AUDIO VISUALIZER</title>
+    <title>STARK DUALSENSE MONITOR</title>
     <style>
-        body { background: #000; margin: 0; overflow: hidden; font-family: 'Arial Black', sans-serif; }
-        canvas { display: block; width: 100vw; height: 100vh; }
-        .ui-overlay {
-            position: fixed; top: 20px; width: 100%; text-align: center;
-            color: #ff0000; letter-spacing: 5px; text-shadow: 0 0 10px #ff0000;
-            pointer-events: none; font-size: 14px;
-        }
-        #start-btn {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 20px 40px; background: #ff0000; color: #000; border: none;
-            font-weight: bold; border-radius: 5px; cursor: pointer; z-index: 10;
-        }
+        :root { --aoc-red: #ff0000; --ui-blue: #00f2ff; }
+        body { background: #000; color: var(--aoc-red); font-family: 'Share Tech Mono', monospace; margin: 0; overflow: hidden; text-transform: uppercase; }
+        
+        .header { padding: 15px; border-bottom: 1px solid var(--aoc-red); font-size: 12px; letter-spacing: 3px; display: flex; justify-content: space-between; }
+        .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 85vh; }
+
+        /* Zones des Joysticks */
+        .stick-display { display: flex; gap: 40px; margin-bottom: 30px; }
+        .stick-container { width: 100px; height: 100px; border: 2px solid #222; border-radius: 50%; position: relative; background: rgba(255,0,0,0.02); }
+        .dot { width: 10px; height: 10px; background: var(--aoc-red); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 15px var(--aoc-red); }
+
+        /* Gâchettes L2/R2 */
+        .trigger-bar { width: 200px; height: 10px; background: #111; border: 1px solid #333; margin: 10px 0; position: relative; overflow: hidden; }
+        .trigger-fill { height: 100%; background: var(--aoc-red); width: 0%; transition: width 0.05s; box-shadow: 0 0 10px var(--aoc-red); }
+
+        .log { font-size: 10px; color: #555; position: fixed; bottom: 20px; width: 100%; }
+        .active-btn { color: white; text-shadow: 0 0 10px var(--aoc-red); }
     </style>
 </head>
 <body>
 
-    <div class="ui-overlay">AOC TACTICAL AUDIO MONITOR</div>
-    <button id="start-btn">ACTIVER MICRO</button>
-    <canvas id="visualizer"></canvas>
+    <div class="header">
+        <div>CONTROLLER_ID: <span id="controller-name">DISCONNECTED</span></div>
+        <div id="status" style="color: #555;">● NO_SIGNAL</div>
+    </div>
+
+    <div class="container">
+        <div class="stick-display">
+            <div>
+                <div class="stick-container"><div id="stick-l" class="dot"></div></div>
+                <div style="font-size: 10px; margin-top: 10px;">LEFT_STICK</div>
+            </div>
+            <div>
+                <div class="stick-container"><div id="stick-r" class="dot"></div></div>
+                <div style="font-size: 10px; margin-top: 10px;">RIGHT_STICK</div>
+            </div>
+        </div>
+
+        <div>L2_PRESSURE</div>
+        <div class="trigger-bar"><div id="fill-l2" class="trigger-fill"></div></div>
+        
+        <div>R2_PRESSURE</div>
+        <div class="trigger-bar"><div id="fill-r2" class="trigger-fill"></div></div>
+
+        <div id="buttons-grid" style="margin-top: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+            <span id="btn-0">✕</span> <span id="btn-1">○</span> <span id="btn-2">□</span> <span id="btn-3">△</span>
+        </div>
+    </div>
+
+    <div class="log" id="log-text">SYSTEM READY. WAITING FOR USB-C INPUT...</div>
 
     <script>
-        const btn = document.getElementById('start-btn');
-        const canvas = document.getElementById('visualizer');
-        const ctx = canvas.getContext('2d');
+        const log = document.getElementById('log-text');
+        const stickL = document.getElementById('stick-l');
+        const stickR = document.getElementById('stick-r');
 
-        btn.addEventListener('click', () => {
-            btn.style.display = 'none';
-            initAudio();
+        window.addEventListener("gamepadconnected", (e) => {
+            document.getElementById('controller-name').innerText = "DUALSENSE_V1";
+            document.getElementById('status').style.color = "#00ff00";
+            document.getElementById('status').innerText = "● LIVE_SYNC";
+            log.innerText = "CONNECTION ESTABLISHED VIA USB-C.";
+            updateLoop();
         });
 
-        function initAudio() {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const analyser = audioCtx.createAnalyser();
+        function updateLoop() {
+            const gamepads = navigator.getGamepads();
+            if (!gamepads[0]) return;
+
+            const gp = gamepads[0];
+
+            // Joysticks (Axes)
+            // axes[0], [1] = Left Stick | axes[2], [3] = Right Stick
+            stickL.style.left = (50 + gp.axes[0] * 40) + "%";
+            stickL.style.top = (50 + gp.axes[1] * 40) + "%";
             
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                const source = audioCtx.createMediaStreamSource(stream);
-                source.connect(analyser);
-                analyser.fftSize = 64; // Nombre de barres
-                const bufferLength = analyser.frequencyBinCount;
-                const dataArray = new Uint8Array(bufferLength);
+            stickR.style.left = (50 + gp.axes[2] * 40) + "%";
+            stickR.style.top = (50 + gp.axes[3] * 40) + "%";
 
-                function draw() {
-                    requestAnimationFrame(draw);
-                    analyser.getByteFrequencyData(dataArray);
+            // Gâchettes (Buttons 6 et 7)
+            document.getElementById('fill-l2').style.width = (gp.buttons[6].value * 100) + "%";
+            document.getElementById('fill-r2').style.width = (gp.buttons[7].value * 100) + "%";
 
-                    canvas.width = window.innerWidth;
-                    canvas.height = window.innerHeight;
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Boutons d'action (0 à 3)
+            for(let i=0; i<4; i++) {
+                const el = document.getElementById('btn-'+i);
+                if(gp.buttons[i].pressed) el.classList.add('active-btn');
+                else el.classList.remove('active-btn');
+            }
 
-                    const barWidth = (canvas.width / bufferLength) * 0.8;
-                    let barHeight;
-                    let x = 0;
-
-                    for (let i = 0; i < bufferLength; i++) {
-                        barHeight = dataArray[i] * 2.5;
-                        
-                        // Couleur Rouge AOC avec dégradé
-                        ctx.fillStyle = `rgb(${dataArray[i] + 100}, 0, 0)`;
-                        ctx.shadowBlur = 15;
-                        ctx.shadowColor = "#ff0000";
-                        
-                        // Dessin de la barre
-                        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-                        x += barWidth + 5;
-                    }
-                }
-                draw();
-            }).catch(err => console.error("Erreur Micro:", err));
+            requestAnimationFrame(updateLoop);
         }
     </script>
 </body>
