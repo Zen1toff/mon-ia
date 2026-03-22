@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA Face Scanner Pro</title>
+    <title>IA Face Scanner Ultra</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <style>
-        :root { --primary: #00ffcc; --error: #ff4444; --bg: #0a0a0a; }
-        body { margin: 0; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; }
+        :root { --primary: #00ffcc; --error: #ff4444; --bg: #050505; }
+        body { margin: 0; background: var(--bg); color: white; font-family: -apple-system, sans-serif; overflow: hidden; }
         
         #status-bar {
             position: fixed; top: 0; width: 100%; height: 50px;
-            background: rgba(0,0,0,0.8); display: flex; align-items: center; 
+            background: rgba(0,0,0,0.9); display: flex; align-items: center; 
             justify-content: center; font-weight: bold; z-index: 101; text-transform: uppercase;
-            letter-spacing: 1px; border-bottom: 2px solid var(--primary);
+            letter-spacing: 1px; border-bottom: 2px solid var(--primary); font-size: 14px;
         }
         .error-mode { border-bottom: 2px solid var(--error) !important; color: var(--error); }
 
@@ -28,16 +28,16 @@
         
         .btn { 
             padding: 18px 35px; background: var(--primary); border: none; 
-            border-radius: 10px; font-weight: bold; color: #000; cursor: pointer;
+            border-radius: 10px; font-weight: bold; color: #000; cursor: pointer; font-size: 1rem;
         }
 
         /* Indicateur de rotation */
         #step-box {
-            margin-top: 20px; padding: 15px; border: 1px solid #333; border-radius: 10px;
-            width: 80%; max-width: 300px;
+            margin-top: 20px; padding: 20px; border: 1px solid #222; border-radius: 12px;
+            width: 80%; max-width: 320px; background: rgba(255,255,255,0.03);
         }
-        .step { opacity: 0.3; margin: 5px 0; transition: 0.3s; }
-        .active-step { opacity: 1; color: var(--primary); scale: 1.1; }
+        .step { opacity: 0.3; margin: 8px 0; transition: 0.3s; font-size: 13px; }
+        .active-step { opacity: 1; color: var(--primary); font-weight: bold; transform: scale(1.05); }
     </style>
 </head>
 <body>
@@ -46,11 +46,12 @@
 
     <div id="overlay">
         <div id="menu-init">
-            <h2>SCANNER BIOMÉTRIQUE</h2>
-            <p>Importez le visage cible pour commencer</p>
+            <h2>SCANNER FACEWRAP ULTRA</h2>
+            <p style="color: #888; margin-bottom: 30px;">Format Portrait recommandé pour le visage cible</p>
             <input type="file" id="file-input" accept="image/*" style="display: none;">
-            <button class="btn" onclick="document.getElementById('file-input').click()">CHOISIR UNE PHOTO</button>
-            <button id="start-btn" class="btn" style="display:none; background:white; margin-top:20px;">DÉMARRER CALIBRATION</button>
+            <button class="btn" onclick="document.getElementById('file-input').click()">1. CHOISIR UNE PHOTO</button>
+            <br>
+            <button id="start-btn" class="btn" style="display:none; background:white; margin-top:20px;">2. DÉMARRER CALIBRATION</button>
         </div>
 
         <div id="calibration-steps" style="display:none;">
@@ -58,6 +59,7 @@
                 <div id="step-face" class="step active-step">1. RESTER FACE</div>
                 <div id="step-left" class="step">2. TOURNER À GAUCHE</div>
                 <div id="step-right" class="step">3. TOURNER À DROITE</div>
+                <div id="step-up" class="step">4. LEVER LE MENTON</div>
             </div>
         </div>
     </div>
@@ -76,108 +78,154 @@
         
         let targetImg = new Image();
         let faceMesh;
-        let currentStep = 'face'; // face, left, right, done
+        let currentStep = 'face'; // face, left, right, up, done
         let calibrationProgress = 0;
 
         // --- 1. IMPORT IMAGE ---
         document.getElementById('file-input').onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
             const reader = new FileReader();
             reader.onload = (f) => {
                 targetImg.onload = () => {
-                    document.getElementById('start-btn').style.display = "block";
+                    document.getElementById('start-btn').style.display = "inline-block";
                     statusBar.innerText = "IMAGE PRÊTE";
                 };
                 targetImg.src = f.target.result;
             };
-            reader.readAsDataURL(e.target.files[0]);
+            reader.readAsDataURL(file);
         };
 
         // --- 2. LOGIQUE DE CALIBRATION ---
-        function checkRotation(points) {
-            // Calcul simple de la rotation via la position du nez (point 1) par rapport aux bords du visage
+        function checkPose(points) {
+            // Calcul des ratios de rotation et d'inclinaison
             const nose = points[1].x;
-            const leftEdge = points[234].x;
-            const rightEdge = points[454].x;
-            const ratio = (nose - leftEdge) / (rightEdge - leftEdge);
+            const leftEdge = points[234].x; // Bord gauche du visage
+            const rightEdge = points[454].x; // Bord droit
+            const yawRatio = (nose - leftEdge) / (rightEdge - leftEdge); // Rotation horizontale
+
+            const noseY = points[1].y;
+            const topEdge = points[10].y; // Haut du front
+            const bottomEdge = points[152].y; // Bas du menton
+            const pitchRatio = (noseY - topEdge) / (bottomEdge - topEdge); // Inclinaison verticale
 
             if (currentStep === 'face') {
-                if (ratio > 0.4 && ratio < 0.6) return true;
+                if (yawRatio > 0.4 && yawRatio < 0.6 && pitchRatio > 0.4 && pitchRatio < 0.6) return true;
             } else if (currentStep === 'left') {
-                if (ratio < 0.35) return true;
+                if (yawRatio < 0.35) return true;
             } else if (currentStep === 'right') {
-                if (ratio > 0.65) return true;
+                if (yawRatio > 0.65) return true;
+            } else if (currentStep === 'up') {
+                if (pitchRatio < 0.35) return true; // Le nez remonte vers le front
             }
             return false;
         }
 
         // --- 3. TRAITEMENT IA ---
         async function initIA() {
-            faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6 });
+            try {
+                faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+                faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6 });
 
-            faceMesh.onResults((results) => {
-                ctx.save();
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                faceMesh.onResults((results) => {
+                    ctx.save();
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                    const points = results.multiFaceLandmarks[0];
-                    statusBar.classList.remove('error-mode');
+                    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                        const points = results.multiFaceLandmarks[0];
+                        statusBar.classList.remove('error-mode');
 
-                    if (currentStep !== 'done') {
-                        // PHASE CALIBRATION
-                        const isOk = checkRotation(points);
-                        if (isOk) {
-                            calibrationProgress++;
-                            if (calibrationProgress > 30) { // Maintenir 30 frames
-                                nextStep();
+                        if (currentStep !== 'done') {
+                            // PHASE CALIBRATION
+                            const isOk = checkPose(points);
+                            if (isOk) {
+                                calibrationProgress++;
+                                if (calibrationProgress > 45) { // Maintenir 1.5 seconde (plus stable)
+                                    nextStep();
+                                }
+                            } else {
+                                calibrationProgress = 0; // Reset si la pose est perdue
                             }
+                        } else {
+                            // PHASE SWAP FINAL
+                            renderSwapUltra(points);
+                            document.getElementById('overlay').style.display = 'none';
                         }
                     } else {
-                        // PHASE SWAP FINAL
-                        renderSwap(points);
-                        document.getElementById('overlay').style.display = 'none';
+                        statusBar.innerText = "ERREUR : VISAGE PERDU";
+                        statusBar.classList.add('error-mode');
+                        calibrationProgress = 0;
                     }
-                } else {
-                    statusBar.innerText = "ERREUR : VISAGE PERDU";
-                    statusBar.classList.add('error-mode');
-                }
-                ctx.restore();
-            });
+                    ctx.restore();
+                });
+            } catch (e) {
+                statusBar.innerText = "ERREUR IA";
+                statusBar.classList.add('error-mode');
+            }
         }
 
         function nextStep() {
             calibrationProgress = 0;
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active-step'));
+            
             if (currentStep === 'face') {
                 currentStep = 'left';
-                document.getElementById('step-face').classList.remove('active-step');
                 document.getElementById('step-left').classList.add('active-step');
                 statusBar.innerText = "TOURNEZ À GAUCHE";
             } else if (currentStep === 'left') {
                 currentStep = 'right';
-                document.getElementById('step-left').classList.remove('active-step');
                 document.getElementById('step-right').classList.add('active-step');
                 statusBar.innerText = "TOURNEZ À DROITE";
+            } else if (currentStep === 'right') {
+                currentStep = 'up';
+                document.getElementById('step-up').classList.add('active-step');
+                statusBar.innerText = "LEVEZ LE MENTON";
             } else {
                 currentStep = 'done';
-                statusBar.innerText = "CALIBRATION RÉUSSIE ✨";
+                statusBar.innerText = "SYNCHRONISATION ULTRA RÉUSSIE ✨";
             }
         }
 
-        function renderSwap(points) {
-            // Masque et affichage de l'image (Méthode Pro corrigée)
+        function renderSwapUltra(points) {
+            // 1. DESSIN DU MASQUE ÉLARGI (Couverture totale)
             ctx.beginPath();
-            const ovalIdx = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
-            ctx.moveTo(points[10].x * canvas.width, points[10].y * canvas.height);
-            ovalIdx.forEach(i => ctx.lineTo(points[i].x * canvas.width, points[i].y * canvas.height));
-            ctx.closePath();
-            ctx.clip();
+            
+            // On utilise une liste de points beaucoup plus large, incluant le cuir chevelu et le cou
+            // Points critiques pour les joues : 127, 234, 93, 132 (Gauche) et 361, 454, 323, 361 (Droite)
+            const ultraFaceIdx = [
+                10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 
+                397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 
+                172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10
+            ];
 
-            const xMin = Math.min(...points.map(p => p.x)) * canvas.width;
-            const xMax = Math.max(...points.map(p => p.x)) * canvas.width;
-            const yMin = Math.min(...points.map(p => p.y)) * canvas.height;
-            const yMax = Math.max(...points.map(p => p.y)) * canvas.height;
-            ctx.drawImage(targetImg, xMin, yMin, xMax - xMin, yMax - yMin);
+            ctx.moveTo(points[10].x * canvas.width, points[10].y * canvas.height);
+            ultraFaceIdx.forEach(i => {
+                ctx.lineTo(points[i].x * canvas.width, points[i].y * canvas.height);
+            });
+            ctx.closePath();
+            ctx.clip(); // Tout ce qui est dessiné après ne sera visible QUE dans cette zone élargie
+
+            // 2. CALCUL DES COORDONNÉES DE L'IMAGE AVEC MARGE
+            const xCoords = points.map(p => p.x * canvas.width);
+            const yCoords = points.map(p => p.y * canvas.height);
+            
+            const xMin = Math.min(...xCoords);
+            const xMax = Math.max(...xCoords);
+            const yMin = Math.min(...yCoords);
+            const yMax = Math.max(...yCoords);
+
+            const faceWidth = xMax - xMin;
+            const faceHeight = yMax - yMin;
+
+            // 3. DESSIN DE L'IMAGE IMPORTÉE (On l'agrandit pour couvrir tout le masque)
+            ctx.drawImage(
+                targetImg, 
+                xMin - (faceWidth * 0.15), // On élargit de 15% à gauche
+                yMin - (faceHeight * 0.2),  // On remonte de 20% pour le front
+                faceWidth * 1.3,           // Largeur totale +30%
+                faceHeight * 1.3           // Hauteur totale +30%
+            );
         }
 
         // --- 4. START ---
@@ -185,20 +233,31 @@
             document.getElementById('menu-init').style.display = 'none';
             document.getElementById('calibration-steps').style.display = 'block';
             document.getElementById('canvas-container').style.display = 'block';
+            statusBar.innerText = "INITIALISATION CAMÉRA...";
             
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-            video.srcObject = stream;
-            
-            await initIA();
-            video.onloadedmetadata = () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const loop = async () => {
-                    await faceMesh.send({image: video});
-                    requestAnimationFrame(loop);
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user", width: 640, height: 480 },
+                    audio: false
+                });
+                video.srcObject = stream;
+                
+                await initIA();
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    statusBar.innerText = "RESTER FACE POUR COMMENCER";
+                    const loop = async () => {
+                        await faceMesh.send({image: video});
+                        requestAnimationFrame(loop);
+                    };
+                    loop();
                 };
-                loop();
-            };
+            } catch (err) {
+                statusBar.innerText = "ACCÈS CAMÉRA REFUSÉ";
+                statusBar.classList.add('error-mode');
+            }
         };
     </script>
 </body>
