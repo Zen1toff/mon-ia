@@ -3,125 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA Scanner - Version Stable</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <title>IA Silhouette Changer</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+
     <style>
-        body { margin: 0; overflow: hidden; background: #000; position: fixed; width: 100vw; height: 100vh; }
-        #video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; }
-        canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 5; pointer-events: none; }
-        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px 40px; background: #00ffcc; border: none; border-radius: 50px; font-weight: bold; }
-        #ui { position: fixed; top: 20px; width: 100%; z-index: 10; text-align: center; color: white; font-family: sans-serif; pointer-events: none; }
-        .badge { background: rgba(0,255,204,0.2); border: 1px solid #00ffcc; padding: 5px 15px; border-radius: 15px; display: inline-block; }
+        body { margin: 0; overflow: hidden; background: #121212; font-family: sans-serif; color: white; }
+        
+        /* Menu de départ */
+        #menu {
+            position: fixed; inset: 0; z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.9); text-align: center; padding: 20px;
+        }
+        
+        #preview-img { width: 100px; height: 100px; object-fit: cover; border-radius: 10px; margin: 20px; display: none; border: 2px solid #00ffcc; }
+        
+        .btn {
+            padding: 15px 30px; background: #00ffcc; color: black;
+            border: none; border-radius: 30px; font-weight: bold; cursor: pointer; margin: 10px;
+        }
+
+        #canvas-container { position: fixed; inset: 0; z-index: 1; display: none; }
+        canvas { width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); }
+        #video-hidden { display: none; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">LANCER LE SCANNER 3D</button>
-    <div id="ui"><div class="badge" id="status">Initialisation...</div></div>
-    <video id="video" autoplay playsinline muted></video>
+    <div id="menu">
+        <h1>CAMÉLÉON IA</h1>
+        <p>Remplace ta silhouette par n'importe quelle image</p>
+        
+        <input type="file" id="file-input" accept="image/*" style="display: none;">
+        <button class="btn" onclick="document.getElementById('file-input').click()">1. IMPORTER UNE IMAGE</button>
+        
+        <img id="preview-img" alt="Aperçu">
+        
+        <button id="start-btn" class="btn" style="background: #555; pointer-events: none;">2. LANCER LE DIRECT</button>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="output-canvas"></canvas>
+    </div>
+    
+    <video id="video-hidden" autoplay playsinline></video>
 
     <script>
-        let scene, camera, renderer, crystal, detector;
-        const video = document.getElementById('video');
-        const status = document.getElementById('status');
+        const video = document.getElementById('video-hidden');
+        const canvas = document.getElementById('output-canvas');
+        const ctx = canvas.getContext('2d');
+        const fileInput = document.getElementById('file-input');
+        const previewImg = document.getElementById('preview-img');
+        const startBtn = document.getElementById('start-btn');
+        let selectedImg = new Image();
 
-        async function init() {
-            document.getElementById('start-btn').style.display = 'none';
-            status.innerText = "Accès caméra...";
-            
+        // 1. Gérer l'importation de l'image
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    previewImg.src = event.target.result;
+                    previewImg.style.display = "block";
+                    selectedImg.src = event.target.result;
+                    startBtn.style.background = "#00ffcc";
+                    startBtn.style.pointerEvents = "auto";
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        // 2. Initialiser MediaPipe Selfie Segmentation
+        const selfieSegmentation = new SelfieSegmentation({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+        });
+
+        selfieSegmentation.setOptions({ modelSelection: 1 }); // 1 pour plus de précision
+
+        selfieSegmentation.onResults((results) => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Dessiner le masque de la personne
+            ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+
+            // Mode "Source-In" : On ne dessine l'image QUE là où se trouve la personne
+            ctx.globalCompositeOperation = 'source-in';
+            ctx.drawImage(selectedImg, 0, 0, canvas.width, canvas.height);
+
+            // Mode "Destination-Over" : On dessine la vidéo originale derrière tout ça
+            ctx.globalCompositeOperation = 'destination-over';
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+            ctx.restore();
+        });
+
+        // 3. Lancer la caméra
+        startBtn.onclick = async () => {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('canvas-container').style.display = 'block';
+
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+                video: { facingMode: "user" } 
             });
             video.srcObject = stream;
 
-            // 1. Scene 3D
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            // 2. Objet : Un "Cristal" technologique
-            const geometry = new THREE.OctahedronGeometry(1, 0);
-            const material = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
-            crystal = new THREE.Mesh(geometry, material);
-            scene.add(crystal);
-
-            // Lumière pour le style
-            const light = new THREE.PointLight(0xffffff, 1, 100);
-            light.position.set(0, 0, 5);
-            scene.add(light);
-
-            camera.position.z = 5;
-
-            // 3. Détecteur avec tolérance élevée
-            status.innerText = "Chargement de l'IA...";
-            detector = await handPoseDetection.createDetector(
-                handPoseDetection.SupportedModels.MediaPipeHands, 
-                { 
-                    runtime: 'mediapipe', 
-                    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands',
-                    modelType: 'lite',
-                    maxHands: 1
-                }
-            );
-
-            status.innerText = "SCANNER PRÊT 🛰️";
-            animate();
-        }
-
-        async function animate() {
-            const hands = await detector.estimateHands(video);
-            
-            if (hands && hands.length > 0) {
-                const hand = hands[0];
-                // Point 9 = Centre de la paume (le plus stable)
-                const palm = hand.keypoints[9]; 
-
-                // Conversion vers coordonnées Three.js
-                // On ajuste les multiplicateurs (7 et 5) pour que l'objet suive bien la main sur l'écran
-                const x = -(palm.x / video.videoWidth * 10 - 5);
-                const y = -(palm.y / video.videoHeight * 10 - 5);
-                
-                crystal.position.set(x, y, 0);
-                crystal.rotation.y += 0.05;
-                crystal.rotation.x += 0.02;
-                crystal.visible = true;
-
-                // Geste : Si l'index est proche du pouce (Pincement)
-                const thumb = hand.keypoints[4];
-                const index = hand.keypoints[8];
-                const dist = Math.sqrt(Math.pow(index.x - thumb.x, 2) + Math.pow(index.y - thumb.y, 2));
-
-                if (dist < 50) {
-                    crystal.material.color.setHex(0xff00ff); // Devient Rose
-                    crystal.scale.set(1.5, 1.5, 1.5);
-                    status.innerText = "OBJET CAPTURÉ";
-                } else {
-                    crystal.material.color.setHex(0x00ffcc); // Vert original
-                    crystal.scale.set(1, 1, 1);
-                    status.innerText = "SCAN EN COURS...";
-                }
-
-            } else {
-                crystal.visible = false;
-                status.innerText = "RECHERCHE DE PAUME...";
+            // Boucle de traitement
+            async function process() {
+                await selfieSegmentation.send({ image: video });
+                requestAnimationFrame(process);
             }
-
-            renderer.render(scene, camera);
-            requestAnimationFrame(animate);
-        }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        document.getElementById('start-btn').addEventListener('click', init);
+            process();
+        };
     </script>
 </body>
 </html>
