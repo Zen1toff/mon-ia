@@ -3,178 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA Face Swapper - Version Stable</title>
-    
+    <title>FaceSwap IA - Stable</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-
     <style>
-        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; color: white; }
+        :root { --accent: #00ffcc; --error: #ff4444; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         
-        /* Menu */
-        #menu {
-            position: fixed; inset: 0; z-index: 100;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: rgba(0,0,0,0.95); padding: 20px;
+        /* Barre de statut */
+        #status-bar {
+            position: fixed; top: 0; width: 100%; height: 40px;
+            background: rgba(0,0,0,0.8); display: flex; align-items: center; 
+            justify-content: center; font-size: 14px; z-index: 110; transition: 0.3s;
+        }
+        .error-mode { background: var(--error) !important; font-weight: bold; }
+
+        /* Menu et Chargement */
+        #overlay { 
+            position: fixed; inset: 0; z-index: 100; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            background: #111; padding: 20px; text-align: center;
         }
         
-        #preview-img { width: 120px; height: 120px; object-fit: cover; border-radius: 60px; margin: 20px; display: none; border: 3px solid #00ffcc; }
-        
-        .btn {
-            padding: 15px 30px; background: #00ffcc; color: black;
-            border: none; border-radius: 30px; font-weight: bold; cursor: pointer; margin: 10px; font-size: 1.1rem;
+        .loader {
+            width: 50px; height: 50px; border: 5px solid #333;
+            border-top: 5px solid var(--accent); border-radius: 50%;
+            animation: spin 1s linear infinite; display: none; margin: 20px;
         }
 
-        /* Zone de rendu */
         #canvas-container { position: fixed; inset: 0; z-index: 1; display: none; }
-        canvas { width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); } /* Effet miroir */
-        #video-hidden { display: none; }
+        canvas { width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); }
+        
+        .btn { 
+            padding: 18px 35px; background: var(--accent); border: none; 
+            border-radius: 50px; font-weight: bold; color: #000; font-size: 1rem;
+        }
+        
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <div id="menu">
-        <h1>FACE SWAP IA</h1>
-        <p>Remplace ton visage par celui d'une photo en direct</p>
-        
-        <input type="file" id="file-input" accept="image/*" style="display: none;">
-        <button class="btn" onclick="document.getElementById('file-input').click()">1. CHOISIR UN VISAGE</button>
-        
-        <img id="preview-img" alt="Aperçu du visage">
-        
-        <button id="start-btn" class="btn" style="background: #555; pointer-events: none;">2. LANCER L'ÉCHANGE</button>
+    <div id="status-bar">En attente d'une photo...</div>
+
+    <div id="overlay">
+        <div id="loader" class="loader"></div>
+        <div id="ui-content">
+            <h1 style="color: var(--accent);">FACE SWAP PRO</h1>
+            <p>Chargez une photo de visage pour commencer</p>
+            <input type="file" id="file-input" accept="image/*" style="display: none;">
+            <button class="btn" onclick="document.getElementById('file-input').click()">1. CHOISIR UNE PHOTO</button>
+            <br>
+            <button id="start-btn" class="btn" style="display:none; background:white; margin-top:20px;">2. LANCER LE SWAP</button>
+        </div>
     </div>
 
     <div id="canvas-container">
-        <canvas id="output-canvas"></canvas>
+        <canvas id="output"></canvas>
     </div>
     
-    <video id="video-hidden" autoplay playsinline muted></video>
+    <video id="webcam" autoplay playsinline muted style="display:none;"></video>
 
     <script>
-        const video = document.getElementById('video-hidden');
-        const canvas = document.getElementById('output-canvas');
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('output');
         const ctx = canvas.getContext('2d');
-        const fileInput = document.getElementById('file-input');
-        const previewImg = document.getElementById('preview-img');
-        const startBtn = document.getElementById('start-btn');
+        const statusBar = document.getElementById('status-bar');
+        const loader = document.getElementById('loader');
+        const uiContent = document.getElementById('ui-content');
+        const overlay = document.getElementById('overlay');
         
-        let targetFaceMesh = null; // Les points du visage de la photo
         let targetImg = new Image();
-        let isTargetLoaded = false;
+        let faceMesh;
 
-        // --- 1. CONFIGURATION DE L'IA FACE MESH ---
-        const faceMesh = new FaceMesh({locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-        }});
-
-        faceMesh.setOptions({
-            maxNumFaces: 1,
-            refineLandmarks: true, // Plus de précision pour les yeux/lèvres
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
-        // --- 2. TRAITEMENT DE L'IMAGE IMPORTÉE (Target) ---
-        fileInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    previewImg.src = event.target.result;
-                    previewImg.style.display = "block";
-                    targetImg.src = event.target.result;
-                    
-                    targetImg.onload = async () => {
-                        // On lance Face Mesh UNE SEULE FOIS sur la photo pour uploader les points
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = targetImg.width; tempCanvas.height = targetImg.height;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        tempCtx.drawImage(targetImg, 0, 0);
-                        
-                        // Détection ponctuelle sur la photo
-                        faceMesh.onResults((results) => {
-                            if (results.multiFaceLandmarks.length > 0) {
-                                targetFaceMesh = results.multiFaceLandmarks[0];
-                                isTargetLoaded = true;
-                                startBtn.style.background = "#00ffcc";
-                                startBtn.style.pointerEvents = "auto";
-                            } else {
-                                alert("Aucun visage détecté sur la photo. Essayez-en une autre.");
-                            }
-                        });
-                        await faceMesh.send({image: tempCanvas});
-                    };
-                };
-                reader.readAsDataURL(file);
-            }
-        };
-
-        // --- 3. BOUCLE DE RENDU EN DIRECT (Swap) ---
-        function drawTriangle(ctx, img, s0, s1, s2, d0, d1, d2) {
-            ctx.save();
-            // Créer le chemin du triangle de destination
-            ctx.beginPath(); ctx.moveTo(d0.x, d0.y); ctx.lineTo(d1.x, d1.y); ctx.lineTo(d2.x, d2.y); ctx.closePath(); ctx.clip();
-
-            // Calculer la transformation affine (déformation texturelle)
-            // (Simplifié ici pour mobile, utilise une déformation de base)
-            ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
-            ctx.restore();
+        function updateStatus(msg, isError = false) {
+            statusBar.innerText = msg;
+            if(isError) statusBar.classList.add('error-mode');
+            else statusBar.classList.remove('error-mode');
         }
 
-        // Configuration pour le swap direct
-        faceMesh.onResults((results) => {
-            if (!isTargetLoaded || !results.multiFaceLandmarks) return;
-            
-            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-            const currentFaceMesh = results.multiFaceLandmarks[0];
+        // 1. IMPORT IMAGE
+        document.getElementById('file-input').onchange = (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                targetImg.onload = () => {
+                    document.getElementById('start-btn').style.display = "inline-block";
+                    updateStatus("Photo prête !");
+                };
+                targetImg.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
 
-            ctx.save();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(video, 0, 0); // Fond : vidéo originale
-
-            // ICI COMMENCE LA MAGIE (Simplifiée pour la démo)
-            // Pour un vrai swap, il faut des centaines de drawTriangle.
-            // Cette version crée un masque souple basé sur le Face Mesh.
+        // 2. INITIALISATION IA
+        async function initIA() {
+            faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
             
-            if(currentFaceMesh && targetFaceMesh) {
-                // Créer le chemin du visage actuel
-                ctx.beginPath();
-                for (let i = 0; i < currentFaceMesh.length; i++) {
-                    const point = currentFaceMesh[i];
-                    if (i === 0) ctx.moveTo(point.x * canvas.width, point.y * canvas.height);
-                    else ctx.lineTo(point.x * canvas.width, point.y * canvas.height);
+            faceMesh.onResults((results) => {
+                // On cache l'écran de chargement dès le premier résultat
+                if (overlay.style.display !== 'none') {
+                    overlay.style.display = 'none';
+                    document.getElementById('canvas-container').style.display = 'block';
                 }
-                ctx.closePath(); ctx.clip(); // On ne dessine que DANS ton visage
 
-                // Dessiner l'image du visage cible, déformée grossièrement pour suivre
-                ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                    const points = results.multiFaceLandmarks[0];
+                    
+                    // Création du masque de découpe (Ovale du visage)
+                    ctx.beginPath();
+                    // On suit les points de contour du visage
+                    ctx.moveTo(points[10].x * canvas.width, points[10].y * canvas.height);
+                    for(let i=0; i<points.length; i+=5) {
+                        ctx.lineTo(points[i].x * canvas.width, points[i].y * canvas.height);
+                    }
+                    ctx.closePath();
+                    ctx.clip();
+
+                    // On dessine la photo importée DANS le masque
+                    ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
+                    updateStatus("SYNC ACTIVE ✨");
+                } else {
+                    updateStatus("RECHERCHE DE VISAGE...");
+                }
+                ctx.restore();
+            });
+        }
+
+        // 3. LANCEMENT
+        document.getElementById('start-btn').onclick = async () => {
+            uiContent.style.display = "none";
+            loader.style.display = "block";
+            updateStatus("Téléchargement de l'IA (veuillez patienter)...");
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user", width: 640, height: 480 } 
+                });
+                video.srcObject = stream;
+
+                await initIA();
+
+                video.onloadedmetadata = async () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    // Boucle infinie
+                    const run = async () => {
+                        if (video.readyState >= 2) {
+                            await faceMesh.send({image: video});
+                        }
+                        requestAnimationFrame(run);
+                    };
+                    run();
+                };
+            } catch (err) {
+                updateStatus("ERREUR CAMÉRA : " + err.message, true);
+                loader.style.display = "none";
+                uiContent.style.display = "block";
             }
-
-            ctx.restore();
-        });
-
-        // --- 4. LANCER LA CAMÉRA ---
-        startBtn.onclick = async () => {
-            document.getElementById('menu').style.display = 'none';
-            document.getElementById('canvas-container').style.display = 'block';
-
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-                audio: false
-            });
-            video.srcObject = stream;
-            
-            // Relancer FaceMesh en mode boucle direct
-            faceMesh.onResults((results) => { /* Code du Swap défini plus haut */ });
-
-            const camera = new Camera(video, {
-                onFrame: async () => {
-                    await faceMesh.send({image: video});
-                },
-                width: 640, height: 480
-            });
-            camera.start();
         };
     </script>
 </body>
