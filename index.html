@@ -5,48 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>WARZONE HUD - CENDRILLON</title>
     <style>
-        :root { --aoc-red: #ff0000; --bg-dark: #080808; }
+        :root { --aoc-red: #ff0000; --bg-dark: #050505; }
         body { 
             background: var(--bg-dark); color: white; 
-            font-family: 'Courier New', Courier, monospace; 
-            margin: 0; padding: 20px; overflow: hidden;
+            font-family: 'Arial Black', Gadget, sans-serif; 
+            margin: 0; padding: 15px; text-align: center;
         }
-        .header { border-bottom: 2px solid var(--aoc-red); padding-bottom: 10px; margin-bottom: 20px; }
-        .main-stat { text-align: center; margin-bottom: 30px; }
-        .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 2px; }
-        .kills-value { font-size: 80px; font-weight: bold; color: var(--aoc-red); line-height: 1; }
+        .header { border-bottom: 2px solid var(--aoc-red); padding-bottom: 8px; margin-bottom: 20px; font-size: 12px; letter-spacing: 3px; }
+        .main-stat { background: rgba(255,0,0,0.05); border: 1px solid #222; padding: 20px; border-radius: 15px; margin-bottom: 20px; }
+        .label { font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
+        .kills-value { font-size: 70px; color: var(--aoc-red); line-height: 1; text-shadow: 0 0 15px rgba(255,0,0,0.5); }
+        .kd-value { font-size: 24px; margin-top: 10px; color: #fff; }
         
-        .history { background: #111; border-left: 3px solid var(--aoc-red); padding: 10px; }
-        .match-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #222; font-size: 14px; }
+        .history-title { text-align: left; font-size: 10px; color: #555; margin-bottom: 10px; padding-left: 5px; }
+        .history { background: #111; border-radius: 8px; overflow: hidden; }
+        .match-row { display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid #222; font-size: 13px; }
         
-        #status { font-size: 10px; color: #00ff00; position: fixed; bottom: 10px; left: 10px; }
-        .glow { text-shadow: 0 0 10px rgba(255, 0, 0, 0.7); }
+        #status-dot { width: 8px; height: 8px; background: #00ff00; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .footer { position: fixed; bottom: 15px; width: 100%; left: 0; font-size: 9px; color: #333; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <span style="font-weight:bold">WARZONE MONITOR</span> v1.0
-    </div>
+    <div class="header">SYSTEM_MONITOR // WARZONE</div>
 
     <div class="main-stat">
-        <div class="label">Dernière Partie</div>
-        <div id="last-kills" class="kills-value glow">--</div>
-        <div id="last-kd" style="font-size: 20px;">KD: --</div>
+        <div class="label">DERNIER MATCH</div>
+        <div id="last-kills" class="kills-value">--</div>
+        <div id="last-kd" class="kd-value">KD: --</div>
     </div>
 
-    <div class="label">Historique Recent</div>
+    <div class="history-title">HISTORIQUE DES 3 DERNIERS MATCHS</div>
     <div id="history-list" class="history">
-        <div class="match-row">Chargement des données...</div>
+        <div class="match-row" style="color:#444">En attente des serveurs Activision...</div>
     </div>
 
-    <div id="status">● SYNC RÉSEAU ACTIVE</div>
+    <div class="footer">
+        <span id="status-dot"></span> SYNC ACTIVE - USER: CENDRILLON#6226996
+    </div>
 
     <script>
+        // Tes accès RapidAPI
         const apiKey = "ef1c928289mshe66a2f22245a488p1a33efjsn81a14b17f475";
         const player = "Cendrillon%236226996";
 
         async function fetchWarzoneData() {
+            console.log("Tentative de synchronisation...");
             try {
                 const response = await fetch(`https://call-of-duty-modern-warfare.p.rapidapi.com/warzone-matches/${player}/psn`, {
                     method: 'GET',
@@ -55,33 +59,45 @@
                         'x-rapidapi-host': 'call-of-duty-modern-warfare.p.rapidapi.com'
                     }
                 });
+                
                 const data = await response.json();
-                const matches = data.matches;
+                
+                if (data && data.matches && data.matches.length > 0) {
+                    const matches = data.matches;
 
-                // 1. Mise à jour du score principal
-                document.getElementById('last-kills').innerText = matches[0].playerStats.kills;
-                document.getElementById('last-kd').innerText = "KD: " + matches[0].playerStats.kdRatio.toFixed(2);
+                    // 1. Affichage du match le plus récent
+                    document.getElementById('last-kills').innerText = matches[0].playerStats.kills;
+                    document.getElementById('last-kd').innerText = "KD: " + matches[0].playerStats.kdRatio.toFixed(2);
 
-                // 2. Mise à jour de l'historique (3 derniers matchs)
-                let historyHTML = "";
-                for(let i=0; i<3; i++) {
-                    let m = matches[i];
-                    historyHTML += `
-                        <div class="match-row">
-                            <span>MATCH ${i+1}</span>
-                            <span style="color:var(--aoc-red)">${m.playerStats.kills} KILLS</span>
-                            <span>${m.playerStats.kdRatio.toFixed(2)} KD</span>
-                        </div>`;
+                    // 2. Construction de l'historique
+                    let historyHTML = "";
+                    const limit = Math.min(matches.length, 3); // On prend les 3 premiers
+                    for(let i=0; i < limit; i++) {
+                        let m = matches[i];
+                        let mode = m.mode.replace('br_', '').toUpperCase(); // Nettoie le nom du mode
+                        historyHTML += `
+                            <div class="match-row">
+                                <span style="color:#666">${mode}</span>
+                                <span style="color:var(--aoc-red); font-weight:bold;">${m.playerStats.kills} KILLS</span>
+                                <span>${m.playerStats.kdRatio.toFixed(2)} KD</span>
+                            </div>`;
+                    }
+                    document.getElementById('history-list').innerHTML = historyHTML;
+                    console.log("Données mises à jour avec succès.");
+                } else {
+                    document.getElementById('history-list').innerHTML = "<div class='match-row'>Aucune donnée trouvée. Vérifie ton mode Public.</div>";
                 }
-                document.getElementById('history-list').innerHTML = historyHTML;
 
             } catch (error) {
-                console.log("Erreur API ou profil privé");
+                console.error("Erreur de connexion à l'API");
+                document.getElementById('history-list').innerHTML = "<div class='match-row' style='color:red'>ERREUR DE SYNC</div>";
             }
         }
 
-        // Refresh automatique toutes les 2 minutes
+        // Première exécution
         fetchWarzoneData();
+
+        // Actualisation toutes les 2 minutes (Warzone met du temps à enregistrer les fins de matchs)
         setInterval(fetchWarzoneData, 120000);
     </script>
 </body>
