@@ -3,57 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FaceSwap IA - Stable</title>
+    <title>IA Face Scanner Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <style>
-        :root { --accent: #00ffcc; --error: #ff4444; }
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        :root { --primary: #00ffcc; --error: #ff4444; --bg: #0a0a0a; }
+        body { margin: 0; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; }
         
-        /* Barre de statut */
         #status-bar {
-            position: fixed; top: 0; width: 100%; height: 40px;
+            position: fixed; top: 0; width: 100%; height: 50px;
             background: rgba(0,0,0,0.8); display: flex; align-items: center; 
-            justify-content: center; font-size: 14px; z-index: 110; transition: 0.3s;
+            justify-content: center; font-weight: bold; z-index: 101; text-transform: uppercase;
+            letter-spacing: 1px; border-bottom: 2px solid var(--primary);
         }
-        .error-mode { background: var(--error) !important; font-weight: bold; }
+        .error-mode { border-bottom: 2px solid var(--error) !important; color: var(--error); }
 
-        /* Menu et Chargement */
         #overlay { 
             position: fixed; inset: 0; z-index: 100; 
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            background: #111; padding: 20px; text-align: center;
-        }
-        
-        .loader {
-            width: 50px; height: 50px; border: 5px solid #333;
-            border-top: 5px solid var(--accent); border-radius: 50%;
-            animation: spin 1s linear infinite; display: none; margin: 20px;
+            background: var(--bg); padding: 20px; text-align: center;
         }
 
         #canvas-container { position: fixed; inset: 0; z-index: 1; display: none; }
         canvas { width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); }
         
         .btn { 
-            padding: 18px 35px; background: var(--accent); border: none; 
-            border-radius: 50px; font-weight: bold; color: #000; font-size: 1rem;
+            padding: 18px 35px; background: var(--primary); border: none; 
+            border-radius: 10px; font-weight: bold; color: #000; cursor: pointer;
         }
-        
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Indicateur de rotation */
+        #step-box {
+            margin-top: 20px; padding: 15px; border: 1px solid #333; border-radius: 10px;
+            width: 80%; max-width: 300px;
+        }
+        .step { opacity: 0.3; margin: 5px 0; transition: 0.3s; }
+        .active-step { opacity: 1; color: var(--primary); scale: 1.1; }
     </style>
 </head>
 <body>
 
-    <div id="status-bar">En attente d'une photo...</div>
+    <div id="status-bar">EN ATTENTE D'IMAGE...</div>
 
     <div id="overlay">
-        <div id="loader" class="loader"></div>
-        <div id="ui-content">
-            <h1 style="color: var(--accent);">FACE SWAP PRO</h1>
-            <p>Chargez une photo de visage pour commencer</p>
+        <div id="menu-init">
+            <h2>SCANNER BIOMÉTRIQUE</h2>
+            <p>Importez le visage cible pour commencer</p>
             <input type="file" id="file-input" accept="image/*" style="display: none;">
-            <button class="btn" onclick="document.getElementById('file-input').click()">1. CHOISIR UNE PHOTO</button>
-            <br>
-            <button id="start-btn" class="btn" style="display:none; background:white; margin-top:20px;">2. LANCER LE SWAP</button>
+            <button class="btn" onclick="document.getElementById('file-input').click()">CHOISIR UNE PHOTO</button>
+            <button id="start-btn" class="btn" style="display:none; background:white; margin-top:20px;">DÉMARRER CALIBRATION</button>
+        </div>
+
+        <div id="calibration-steps" style="display:none;">
+            <div id="step-box">
+                <div id="step-face" class="step active-step">1. RESTER FACE</div>
+                <div id="step-left" class="step">2. TOURNER À GAUCHE</div>
+                <div id="step-right" class="step">3. TOURNER À DROITE</div>
+            </div>
         </div>
     </div>
 
@@ -68,105 +73,132 @@
         const canvas = document.getElementById('output');
         const ctx = canvas.getContext('2d');
         const statusBar = document.getElementById('status-bar');
-        const loader = document.getElementById('loader');
-        const uiContent = document.getElementById('ui-content');
-        const overlay = document.getElementById('overlay');
         
         let targetImg = new Image();
         let faceMesh;
+        let currentStep = 'face'; // face, left, right, done
+        let calibrationProgress = 0;
 
-        function updateStatus(msg, isError = false) {
-            statusBar.innerText = msg;
-            if(isError) statusBar.classList.add('error-mode');
-            else statusBar.classList.remove('error-mode');
-        }
-
-        // 1. IMPORT IMAGE
+        // --- 1. IMPORT IMAGE ---
         document.getElementById('file-input').onchange = (e) => {
-            const file = e.target.files[0];
-            if(!file) return;
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = (f) => {
                 targetImg.onload = () => {
-                    document.getElementById('start-btn').style.display = "inline-block";
-                    updateStatus("Photo prête !");
+                    document.getElementById('start-btn').style.display = "block";
+                    statusBar.innerText = "IMAGE PRÊTE";
                 };
-                targetImg.src = event.target.result;
+                targetImg.src = f.target.result;
             };
-            reader.readAsDataURL(file);
+            reader.readAsDataURL(e.target.files[0]);
         };
 
-        // 2. INITIALISATION IA
+        // --- 2. LOGIQUE DE CALIBRATION ---
+        function checkRotation(points) {
+            // Calcul simple de la rotation via la position du nez (point 1) par rapport aux bords du visage
+            const nose = points[1].x;
+            const leftEdge = points[234].x;
+            const rightEdge = points[454].x;
+            const ratio = (nose - leftEdge) / (rightEdge - leftEdge);
+
+            if (currentStep === 'face') {
+                if (ratio > 0.4 && ratio < 0.6) return true;
+            } else if (currentStep === 'left') {
+                if (ratio < 0.35) return true;
+            } else if (currentStep === 'right') {
+                if (ratio > 0.65) return true;
+            }
+            return false;
+        }
+
+        // --- 3. TRAITEMENT IA ---
         async function initIA() {
             faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
-            
-            faceMesh.onResults((results) => {
-                // On cache l'écran de chargement dès le premier résultat
-                if (overlay.style.display !== 'none') {
-                    overlay.style.display = 'none';
-                    document.getElementById('canvas-container').style.display = 'block';
-                }
+            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6 });
 
+            faceMesh.onResults((results) => {
                 ctx.save();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
                 if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                     const points = results.multiFaceLandmarks[0];
-                    
-                    // Création du masque de découpe (Ovale du visage)
-                    ctx.beginPath();
-                    // On suit les points de contour du visage
-                    ctx.moveTo(points[10].x * canvas.width, points[10].y * canvas.height);
-                    for(let i=0; i<points.length; i+=5) {
-                        ctx.lineTo(points[i].x * canvas.width, points[i].y * canvas.height);
-                    }
-                    ctx.closePath();
-                    ctx.clip();
+                    statusBar.classList.remove('error-mode');
 
-                    // On dessine la photo importée DANS le masque
-                    ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
-                    updateStatus("SYNC ACTIVE ✨");
+                    if (currentStep !== 'done') {
+                        // PHASE CALIBRATION
+                        const isOk = checkRotation(points);
+                        if (isOk) {
+                            calibrationProgress++;
+                            if (calibrationProgress > 30) { // Maintenir 30 frames
+                                nextStep();
+                            }
+                        }
+                    } else {
+                        // PHASE SWAP FINAL
+                        renderSwap(points);
+                        document.getElementById('overlay').style.display = 'none';
+                    }
                 } else {
-                    updateStatus("RECHERCHE DE VISAGE...");
+                    statusBar.innerText = "ERREUR : VISAGE PERDU";
+                    statusBar.classList.add('error-mode');
                 }
                 ctx.restore();
             });
         }
 
-        // 3. LANCEMENT
-        document.getElementById('start-btn').onclick = async () => {
-            uiContent.style.display = "none";
-            loader.style.display = "block";
-            updateStatus("Téléchargement de l'IA (veuillez patienter)...");
-
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user", width: 640, height: 480 } 
-                });
-                video.srcObject = stream;
-
-                await initIA();
-
-                video.onloadedmetadata = async () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    
-                    // Boucle infinie
-                    const run = async () => {
-                        if (video.readyState >= 2) {
-                            await faceMesh.send({image: video});
-                        }
-                        requestAnimationFrame(run);
-                    };
-                    run();
-                };
-            } catch (err) {
-                updateStatus("ERREUR CAMÉRA : " + err.message, true);
-                loader.style.display = "none";
-                uiContent.style.display = "block";
+        function nextStep() {
+            calibrationProgress = 0;
+            if (currentStep === 'face') {
+                currentStep = 'left';
+                document.getElementById('step-face').classList.remove('active-step');
+                document.getElementById('step-left').classList.add('active-step');
+                statusBar.innerText = "TOURNEZ À GAUCHE";
+            } else if (currentStep === 'left') {
+                currentStep = 'right';
+                document.getElementById('step-left').classList.remove('active-step');
+                document.getElementById('step-right').classList.add('active-step');
+                statusBar.innerText = "TOURNEZ À DROITE";
+            } else {
+                currentStep = 'done';
+                statusBar.innerText = "CALIBRATION RÉUSSIE ✨";
             }
+        }
+
+        function renderSwap(points) {
+            // Masque et affichage de l'image (Méthode Pro corrigée)
+            ctx.beginPath();
+            const ovalIdx = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+            ctx.moveTo(points[10].x * canvas.width, points[10].y * canvas.height);
+            ovalIdx.forEach(i => ctx.lineTo(points[i].x * canvas.width, points[i].y * canvas.height));
+            ctx.closePath();
+            ctx.clip();
+
+            const xMin = Math.min(...points.map(p => p.x)) * canvas.width;
+            const xMax = Math.max(...points.map(p => p.x)) * canvas.width;
+            const yMin = Math.min(...points.map(p => p.y)) * canvas.height;
+            const yMax = Math.max(...points.map(p => p.y)) * canvas.height;
+            ctx.drawImage(targetImg, xMin, yMin, xMax - xMin, yMax - yMin);
+        }
+
+        // --- 4. START ---
+        document.getElementById('start-btn').onclick = async () => {
+            document.getElementById('menu-init').style.display = 'none';
+            document.getElementById('calibration-steps').style.display = 'block';
+            document.getElementById('canvas-container').style.display = 'block';
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            video.srcObject = stream;
+            
+            await initIA();
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const loop = async () => {
+                    await faceMesh.send({image: video});
+                    requestAnimationFrame(loop);
+                };
+                loop();
+            };
         };
     </script>
 </body>
