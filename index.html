@@ -2,61 +2,53 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Warzone Live Tracker - Cendrillon</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WARZONE HUD - CENDRILLON</title>
     <style>
+        :root { --aoc-red: #ff0000; --bg-dark: #080808; }
         body { 
-            background-color: #050505; 
-            color: #ff0000; 
-            font-family: 'Segoe UI', Roboto, sans-serif; 
-            text-align: center; 
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            height: 100vh;
+            background: var(--bg-dark); color: white; 
+            font-family: 'Courier New', Courier, monospace; 
+            margin: 0; padding: 20px; overflow: hidden;
         }
-        .container {
-            border: 2px solid #ff0000;
-            margin: 15px;
-            padding: 20px;
-            border-radius: 10px;
-            background: linear-gradient(145deg, #1a1a1a, #000);
-            box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
-        }
-        .label { font-size: 0.9em; color: #888; text-transform: uppercase; letter-spacing: 2px; }
-        .value { font-size: 4em; font-weight: bold; margin: 10px 0; text-shadow: 2px 2px #330000; }
-        .kd-box { color: #fff; font-size: 2em; }
-        .footer { font-size: 0.6em; color: #444; margin-top: 20px; }
-        #loader { width: 0%; height: 4px; background: #ff0000; position: fixed; top: 0; transition: width 0.5s; }
+        .header { border-bottom: 2px solid var(--aoc-red); padding-bottom: 10px; margin-bottom: 20px; }
+        .main-stat { text-align: center; margin-bottom: 30px; }
+        .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+        .kills-value { font-size: 80px; font-weight: bold; color: var(--aoc-red); line-height: 1; }
+        
+        .history { background: #111; border-left: 3px solid var(--aoc-red); padding: 10px; }
+        .match-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #222; font-size: 14px; }
+        
+        #status { font-size: 10px; color: #00ff00; position: fixed; bottom: 10px; left: 10px; }
+        .glow { text-shadow: 0 0 10px rgba(255, 0, 0, 0.7); }
     </style>
 </head>
 <body>
-    <div id="loader"></div>
-    
-    <div class="container">
-        <div class="label">Dernière Game : Kills</div>
-        <div id="kills" class="value">--</div>
-        
-        <div class="label">Ratio K/D</div>
-        <div id="kd" class="kd-box">--</div>
+
+    <div class="header">
+        <span style="font-weight:bold">WARZONE MONITOR</span> v1.0
     </div>
 
-    <div class="footer">BRANCHÉ EN USB-C À LA PS5 - CONNECTÉ À L'API RAPIDAPI</div>
+    <div class="main-stat">
+        <div class="label">Dernière Partie</div>
+        <div id="last-kills" class="kills-value glow">--</div>
+        <div id="last-kd" style="font-size: 20px;">KD: --</div>
+    </div>
+
+    <div class="label">Historique Recent</div>
+    <div id="history-list" class="history">
+        <div class="match-row">Chargement des données...</div>
+    </div>
+
+    <div id="status">● SYNC RÉSEAU ACTIVE</div>
 
     <script>
-        // Tes vraies infos extraites de ta capture
         const apiKey = "ef1c928289mshe66a2f22245a488p1a33efjsn81a14b17f475";
-        const player = "Cendrillon%236226996"; 
+        const player = "Cendrillon%236226996";
 
-        async function refreshStats() {
-            document.getElementById('loader').style.width = "50%";
-            
-            // On interroge l'endpoint "Warzone Matches" pour avoir le dernier match
-            const url = `https://call-of-duty-modern-warfare.p.rapidapi.com/warzone-matches/${player}/psn`;
-            
+        async function fetchWarzoneData() {
             try {
-                const response = await fetch(url, {
+                const response = await fetch(`https://call-of-duty-modern-warfare.p.rapidapi.com/warzone-matches/${player}/psn`, {
                     method: 'GET',
                     headers: {
                         'x-rapidapi-key': apiKey,
@@ -64,25 +56,33 @@
                     }
                 });
                 const data = await response.json();
-                
-                // On récupère le match le plus récent [0]
-                const lastMatch = data.matches[0];
-                
-                document.getElementById('kills').innerText = lastMatch.playerStats.kills;
-                document.getElementById('kd').innerText = lastMatch.playerStats.kdRatio.toFixed(2);
-                
-                document.getElementById('loader').style.width = "100%";
-                setTimeout(() => { document.getElementById('loader').style.width = "0%"; }, 1000);
-                
-            } catch (err) {
-                console.error("Erreur de chargement des stats");
-                document.getElementById('kills').innerText = "ERR";
+                const matches = data.matches;
+
+                // 1. Mise à jour du score principal
+                document.getElementById('last-kills').innerText = matches[0].playerStats.kills;
+                document.getElementById('last-kd').innerText = "KD: " + matches[0].playerStats.kdRatio.toFixed(2);
+
+                // 2. Mise à jour de l'historique (3 derniers matchs)
+                let historyHTML = "";
+                for(let i=0; i<3; i++) {
+                    let m = matches[i];
+                    historyHTML += `
+                        <div class="match-row">
+                            <span>MATCH ${i+1}</span>
+                            <span style="color:var(--aoc-red)">${m.playerStats.kills} KILLS</span>
+                            <span>${m.playerStats.kdRatio.toFixed(2)} KD</span>
+                        </div>`;
+                }
+                document.getElementById('history-list').innerHTML = historyHTML;
+
+            } catch (error) {
+                console.log("Erreur API ou profil privé");
             }
         }
 
-        // Lancement auto toutes les 2 minutes (120000 ms)
-        refreshStats();
-        setInterval(refreshStats, 120000);
+        // Refresh automatique toutes les 2 minutes
+        fetchWarzoneData();
+        setInterval(fetchWarzoneData, 120000);
     </script>
 </body>
 </html>
