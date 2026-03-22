@@ -1,38 +1,46 @@
-// URL de l'API Open Data de Caen (Jeu de données : Arrêts de transport)
-const urlTwisto = "https://data.twisto.fr/api/explore/v2.1/catalog/datasets/gtfs-stops-twisto/records?limit=50";
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Twisto Caen Live</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 100vh; width: 100%; }
+        body { margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
 
-async function chargerStations() {
-    try {
-        const response = await fetch(urlTwisto);
-        const data = await response.json();
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialisation de la carte
+        const map = L.map('map').setView([49.1828, -0.3707], 14);
 
-        // On boucle sur chaque station reçue
-        data.results.forEach(station => {
-            const lat = station.stop_lat;
-            const lon = station.stop_lon;
-            const nom = station.stop_name;
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
 
-            // Création du marqueur sur la carte
-            const marker = L.marker([lat, lon]).addTo(map);
-            
-            // On ajoute une popup avec le nom et un bouton pour le temps réel
-            marker.bindPopup(`
-                <b>${nom}</b><br>
-                <button onclick="getTempsReel('${station.stop_id}')">Voir les prochains passages</button>
-                <div id="info-${station.stop_id}"></div>
-            `);
-        });
-    } catch (error) {
-        console.error("Erreur lors de la récupération des stations :", error);
-    }
-}
+        // Récupération des données Twisto
+        async function chargerStations() {
+            try {
+                const response = await fetch("https://data.twisto.fr/api/explore/v2.1/catalog/datasets/gtfs-stops-twisto/records?limit=50");
+                const data = await response.json();
 
-// Lancer le chargement au démarrage
-chargerStations();
+                data.results.forEach(station => {
+                    if(station.stop_lat && station.stop_lon) {
+                        L.marker([station.stop_lat, station.stop_lon])
+                         .addTo(map)
+                         .bindPopup(`<b>${station.stop_name}</b>`);
+                    }
+                });
+            } catch (err) {
+                alert("Erreur de chargement : Vérifie ta connexion internet !");
+                console.error(err);
+            }
+        }
 
-// Fonction (vide pour l'instant) pour le temps réel
-function getTempsReel(stopId) {
-    const div = document.getElementById(`info-${stopId}`);
-    div.innerHTML = "<br><i>Recherche des horaires...</i>";
-    // C'est ici qu'on appellera l'API des temps de passage plus tard !
-}
+        chargerStations();
+    </script>
+</body>
+</html>
