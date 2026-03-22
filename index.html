@@ -3,64 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA Object Scanner - AR</title>
+    <title>IA Scanner - Version Stable</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #000; position: fixed; width: 100vw; height: 100vh; }
-        #video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; opacity: 0.8; }
+        #video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; }
         canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 5; pointer-events: none; }
-        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px 40px; background: #00ffcc; border: none; border-radius: 50px; font-weight: bold; font-size: 1.2rem; box-shadow: 0 0 20px #00ffcc; }
-        #ui { position: fixed; bottom: 30px; width: 100%; z-index: 10; text-align: center; color: white; font-family: sans-serif; pointer-events: none; text-shadow: 2px 2px 4px #000; }
+        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px 40px; background: #00ffcc; border: none; border-radius: 50px; font-weight: bold; }
+        #ui { position: fixed; top: 20px; width: 100%; z-index: 10; text-align: center; color: white; font-family: sans-serif; pointer-events: none; }
+        .badge { background: rgba(0,255,204,0.2); border: 1px solid #00ffcc; padding: 5px 15px; border-radius: 15px; display: inline-block; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">INITIALISER LE SCANNER AR</button>
-    <div id="ui">Placez votre paume face caméra</div>
-    
+    <button id="start-btn">LANCER LE SCANNER 3D</button>
+    <div id="ui"><div class="badge" id="status">Initialisation...</div></div>
     <video id="video" autoplay playsinline muted></video>
 
     <script>
-        let scene, camera, renderer, sphere, detector;
+        let scene, camera, renderer, crystal, detector;
         const video = document.getElementById('video');
-        const startBtn = document.getElementById('start-btn');
+        const status = document.getElementById('status');
 
         async function init() {
-            startBtn.style.display = 'none';
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            document.getElementById('start-btn').style.display = 'none';
+            status.innerText = "Accès caméra...";
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+            });
             video.srcObject = stream;
 
-            // 1. Setup Three.js
+            // 1. Scene 3D
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
-            // 2. Création de l'objet 3D (Sphère technologique)
-            const geometry = new THREE.IcosahedronGeometry(1, 4);
-            const material = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.5 });
-            sphere = new THREE.Mesh(geometry, material);
-            scene.add(sphere);
+            // 2. Objet : Un "Cristal" technologique
+            const geometry = new THREE.OctahedronGeometry(1, 0);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
+            crystal = new THREE.Mesh(geometry, material);
+            scene.add(crystal);
 
-            // Ajout de points lumineux sur la sphère
-            const pointsGeom = new THREE.PointsGeometry().setFromPoints(geometry.attributes.position.array);
-            const pointsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05 });
-            const points = new THREE.Points(geometry, pointsMat);
-            sphere.add(points);
+            // Lumière pour le style
+            const light = new THREE.PointLight(0xffffff, 1, 100);
+            light.position.set(0, 0, 5);
+            scene.add(light);
 
             camera.position.z = 5;
 
-            // 3. Setup MediaPipe
+            // 3. Détecteur avec tolérance élevée
+            status.innerText = "Chargement de l'IA...";
             detector = await handPoseDetection.createDetector(
                 handPoseDetection.SupportedModels.MediaPipeHands, 
-                { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands', modelType: 'lite' }
+                { 
+                    runtime: 'mediapipe', 
+                    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands',
+                    modelType: 'lite',
+                    maxHands: 1
+                }
             );
 
+            status.innerText = "SCANNER PRÊT 🛰️";
             animate();
         }
 
@@ -69,35 +78,37 @@
             
             if (hands && hands.length > 0) {
                 const hand = hands[0];
+                // Point 9 = Centre de la paume (le plus stable)
+                const palm = hand.keypoints[9]; 
+
+                // Conversion vers coordonnées Three.js
+                // On ajuste les multiplicateurs (7 et 5) pour que l'objet suive bien la main sur l'écran
+                const x = -(palm.x / video.videoWidth * 10 - 5);
+                const y = -(palm.y / video.videoHeight * 10 - 5);
                 
-                // Coordonnées du centre de la paume (Point 9 : Base du majeur)
-                const palmCenter = hand.keypoints[9];
-                const wrist = hand.keypoints[0];
+                crystal.position.set(x, y, 0);
+                crystal.rotation.y += 0.05;
+                crystal.rotation.x += 0.02;
+                crystal.visible = true;
 
-                // Conversion 2D vers Espace 3D Three.js
-                const x = -(palmCenter.x / video.videoWidth * 10 - 5);
-                const y = -(palmCenter.y / video.videoHeight * 10 - 5);
-                const z = (hand.keypoints3D[9].z * -10); // Profondeur réelle !
+                // Geste : Si l'index est proche du pouce (Pincement)
+                const thumb = hand.keypoints[4];
+                const index = hand.keypoints[8];
+                const dist = Math.sqrt(Math.pow(index.x - thumb.x, 2) + Math.pow(index.y - thumb.y, 2));
 
-                sphere.position.set(x, y, z);
-
-                // Rotation basée sur l'orientation de la main
-                sphere.rotation.x += 0.05;
-                sphere.rotation.y += 0.05;
-
-                // Détection POING FERMÉ (Changement d'état)
-                const isFist = Math.abs(hand.keypoints[12].y - hand.keypoints[0].y) < 100;
-                if (isFist) {
-                    sphere.material.color.setHex(0xff0044); // Rouge
-                    sphere.scale.set(0.6, 0.6, 0.6);
+                if (dist < 50) {
+                    crystal.material.color.setHex(0xff00ff); // Devient Rose
+                    crystal.scale.set(1.5, 1.5, 1.5);
+                    status.innerText = "OBJET CAPTURÉ";
                 } else {
-                    sphere.material.color.setHex(0x00ffcc); // Cyan
-                    sphere.scale.set(1.2, 1.2, 1.2);
+                    crystal.material.color.setHex(0x00ffcc); // Vert original
+                    crystal.scale.set(1, 1, 1);
+                    status.innerText = "SCAN EN COURS...";
                 }
-                
-                sphere.visible = true;
+
             } else {
-                sphere.visible = false;
+                crystal.visible = false;
+                status.innerText = "RECHERCHE DE PAUME...";
             }
 
             renderer.render(scene, camera);
@@ -110,7 +121,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        startBtn.addEventListener('click', init);
+        document.getElementById('start-btn').addEventListener('click', init);
     </script>
 </body>
 </html>
