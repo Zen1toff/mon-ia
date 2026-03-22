@@ -1,46 +1,102 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>Twisto Caen Live</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mini Village Builder</title>
     <style>
-        #map { height: 100vh; width: 100%; }
-        body { margin: 0; padding: 0; }
+        body { margin: 0; background: #2c3e50; color: white; font-family: sans-serif; overflow: hidden; }
+        #ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+        .stat { font-size: 20px; font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; margin-bottom: 5px; }
+        #shop { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+        button { padding: 15px; border: none; border-radius: 10px; background: #e67e22; color: white; font-weight: bold; cursor: pointer; pointer-events: auto; }
+        canvas { display: block; touch-action: none; }
     </style>
 </head>
 <body>
-    <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <div id="ui">
+        <div class="stat">Or: <span id="goldText">500</span> 🪙</div>
+    </div>
+
+    <div id="shop">
+        <button onclick="selectBuilding('mine')">Mine d'Or (100 🪙)</button>
+        <button onclick="selectBuilding('cabane')">Cabane (50 🪙)</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
     <script>
-        // Initialisation de la carte
-        const map = L.map('map').setView([49.1828, -0.3707], 14);
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const goldText = document.getElementById('goldText');
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
+        let gold = 500;
+        let gridSize = 40; // Taille d'une case
+        let buildings = [];
+        let selectedType = null;
 
-        // Récupération des données Twisto
-        async function chargerStations() {
-            try {
-                const response = await fetch("https://data.twisto.fr/api/explore/v2.1/catalog/datasets/gtfs-stops-twisto/records?limit=50");
-                const data = await response.json();
+        // Ajuster la taille du canvas
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-                data.results.forEach(station => {
-                    if(station.stop_lat && station.stop_lon) {
-                        L.marker([station.stop_lat, station.stop_lon])
-                         .addTo(map)
-                         .bindPopup(`<b>${station.stop_name}</b>`);
-                    }
-                });
-            } catch (err) {
-                alert("Erreur de chargement : Vérifie ta connexion internet !");
-                console.error(err);
-            }
+        function selectBuilding(type) {
+            selectedType = type;
         }
 
-        chargerStations();
+        // Click ou Touch sur l'iPhone
+        canvas.addEventListener('pointerdown', (e) => {
+            if (!selectedType) return;
+
+            const cost = selectedType === 'mine' ? 100 : 50;
+            if (gold >= cost) {
+                // Centrer sur la grille
+                const x = Math.floor(e.clientX / gridSize) * gridSize;
+                const y = Math.floor(e.clientY / gridSize) * gridSize;
+
+                // Vérifier si la place est libre
+                if (!buildings.find(b => b.x === x && b.y === y)) {
+                    buildings.push({ x, y, type: selectedType, lastProd: Date.now() });
+                    gold -= cost;
+                    selectedType = null; // Désélectionner après la pose
+                }
+            }
+        });
+
+        // Boucle de jeu (60 FPS)
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Dessiner la grille
+            ctx.strokeStyle = "rgba(255,255,255,0.1)";
+            for(let x=0; x<canvas.width; x+=gridSize) {
+                for(let y=0; y<canvas.height; y+=gridSize) {
+                    ctx.strokeRect(x, y, gridSize, gridSize);
+                }
+            }
+
+            // Gérer les bâtiments et la production
+            buildings.forEach(b => {
+                // Dessin simple (Carrés de couleurs)
+                ctx.fillStyle = b.type === 'mine' ? '#f1c40f' : '#ecf0f1';
+                ctx.fillRect(b.x + 2, b.y + 2, gridSize - 4, gridSize - 4);
+
+                // Production d'or toutes les 2 secondes pour les mines
+                if (b.type === 'mine' && Date.now() - b.lastProd > 2000) {
+                    gold += 10;
+                    b.lastProd = Date.now();
+                }
+            });
+
+            goldText.innerText = gold;
+            requestAnimationFrame(update);
+        }
+
+        update();
     </script>
 </body>
 </html>
