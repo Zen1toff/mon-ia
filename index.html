@@ -1,102 +1,32 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="utf-8">
-    <title>AR Finger Measure</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ma Carte Twisto - Caen</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
-        #ui { 
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; color: #00ffcc; z-index: 10; pointer-events: none;
-            text-shadow: 0 0 10px rgba(0,255,204,0.8);
-        }
-        #distance { font-size: 80px; font-weight: bold; }
-        video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }
-        canvas { position: fixed; inset: 0; z-index: 1; }
-        .line { position: absolute; height: 2px; background: #00ffcc; transform-origin: left center; z-index: 5; box-shadow: 0 0 8px #00ffcc; }
+        #map { height: 100vh; width: 100%; }
+        body { margin: 0; }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <div id="distance">0.0</div>
-        <div id="unit">CENTIMÈTRES</div>
-    </div>
-    <video id="webcam" playsinline></video>
-    <canvas id="output_canvas"></canvas>
 
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const video = document.getElementById('webcam');
-        const canvasElement = document.getElementById('output_canvas');
-        const canvasCtx = canvasElement.getContext('2d');
-        const distanceDisplay = document.getElementById('distance');
+        // 1. Initialiser la carte sur Caen
+        const map = L.map('map').setView([49.1828, -0.3707], 13);
 
-        // Ratio de calibration (à ajuster selon la distance de la caméra)
-        // Environ 150 pixels = 10cm à une distance de bras
-        const CALIBRATION_FACTOR = 35; 
+        // 2. Ajouter le fond de carte (OpenStreetMap)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
 
-        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7 });
-
-        hands.onResults((results) => {
-            canvasElement.width = window.innerWidth;
-            canvasElement.height = window.innerHeight;
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                const thumb = landmarks[4]; // Bout du pouce
-                const index = landmarks[8]; // Bout de l'index
-
-                // Coordonnées réelles sur l'écran
-                const x1 = thumb.x * canvasElement.width;
-                const y1 = thumb.y * canvasElement.height;
-                const x2 = index.x * canvasElement.width;
-                const y2 = index.y * canvasElement.height;
-
-                // Calcul de la distance en pixels
-                const pixelDist = Math.hypot(x2 - x1, y2 - y1);
-                
-                // Conversion approximative en CM (basée sur la profondeur Z moyenne)
-                // Plus la main est loin (Z petit), plus on doit compenser
-                const depthScale = 1 / (1 - landmarks[0].z); 
-                const cm = (pixelDist / CALIBRATION_FACTOR) * depthScale;
-
-                distanceDisplay.innerText = cm.toFixed(1);
-
-                // Dessiner la ligne laser entre les doigts
-                canvasCtx.beginPath();
-                canvasCtx.moveTo(x1, y1);
-                canvasCtx.lineTo(x2, y2);
-                canvasCtx.strokeStyle = '#00ffcc';
-                canvasCtx.lineWidth = 5;
-                canvasCtx.lineCap = 'round';
-                canvasCtx.stroke();
-
-                // Dessiner les points d'ancrage
-                canvasCtx.fillStyle = '#ffffff';
-                canvasCtx.beginPath();
-                canvasCtx.arc(x1, y1, 8, 0, 2 * Math.PI);
-                canvasCtx.arc(x2, y2, 8, 0, 2 * Math.PI);
-                canvasCtx.fill();
-            }
-        });
-
-        async function start() {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment" } 
-            });
-            video.srcObject = stream;
-            await video.play();
-
-            const loop = async () => {
-                await hands.send({image: video});
-                requestAnimationFrame(loop);
-            };
-            loop();
-        }
-
-        start();
+        // 3. Exemple : Ajouter un marqueur pour la station "Bernières"
+        const bernieres = L.marker([49.1824, -0.3589]).addTo(map);
+        bernieres.bindPopup("<b>Station Bernières</b><br>Chargement des temps Twisto...");
     </script>
 </body>
 </html>
