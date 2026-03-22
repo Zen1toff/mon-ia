@@ -2,121 +2,123 @@
 <html lang="fr">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AR World Anchor</title>
+    <title>UNO 3D Hand Interaction</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; }
-        #overlay {
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            padding: 15px; background: rgba(0,0,0,0.7); color: white;
-            border-radius: 10px; z-index: 10; pointer-events: none; text-align: center;
-        }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #info { position: fixed; top: 10px; width: 100%; text-align: center; color: #ff0044; z-index: 10; font-weight: bold; text-shadow: 0 0 5px #000; }
+        video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: -1; opacity: 0.5; }
+        canvas { position: fixed; inset: 0; z-index: 1; }
     </style>
 </head>
 <body>
-    <div id="overlay">Visez une surface plane (table/sol)<br>et touchez l'écran pour ancrer le cube</div>
+    <div id="info">UNO 3D : GAUCHE = PAQUET | DROITE = PRENDRE</div>
+    <video id="webcam" playsinline></video>
 
-    <script type="module">
-        import * as THREE from 'https://unpkg.com/three@0.150.1/build/three.module.js';
-        import { ARButton } from 'https://unpkg.com/three@0.150.1/examples/jsm/webxr/ARButton.js';
+    <script>
+        let scene, camera, renderer, deck, activeCard;
+        const video = document.getElementById('webcam');
+        let isHolding = false;
 
-        let container, camera, scene, renderer;
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
-        let reticle; // Le petit cercle qui cherche le sol
-
-        init();
-        animate();
-
-        function init() {
-            container = document.createElement('div');
-            document.body.appendChild(container);
-
+        // 1. INITIALISATION DU MONDE UNO
+        function init3D() {
             scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
 
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            // Création du Paquet de cartes (Main Gauche)
+            const deckGeom = new THREE.BoxGeometry(0.4, 0.05, 0.6);
+            const deckMat = new THREE.MeshPhongMaterial({ color: 0xff0000 }); // Dos rouge UNO
+            deck = new THREE.Mesh(deckGeom, deckMat);
+            scene.add(deck);
+
+            // Carte active (Celle qu'on pioche)
+            const cardGeom = new THREE.PlaneGeometry(0.35, 0.55);
+            const cardMat = new THREE.MeshPhongMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
+            activeCard = new THREE.Mesh(cardGeom, cardMat);
+            activeCard.visible = false;
+            scene.add(activeCard);
+
+            const light = new THREE.PointLight(0xffffff, 1, 100);
+            light.position.set(0, 2, 5);
             scene.add(light);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            container.appendChild(renderer.domElement);
-
-            // Bouton pour démarrer l'AR (Demande l'accès hit-test)
-            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
-
-            // Création du réticule (le pointeur de sol)
-            reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0x00ffcc })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
-
-            // Action quand on touche l'écran : On pose le cube
-            const controller = renderer.xr.getController(0);
-            controller.addEventListener('select', onSelect);
-            scene.add(controller);
-
-            window.addEventListener('resize', onWindowResize);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            camera.position.z = 3;
         }
 
-        function onSelect() {
-            if (reticle.visible) {
-                // Création d'un cube ancré
-                const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-                const material = new THREE.MeshPhongMaterial({ color: 0xffffff * Math.random() });
-                const mesh = new THREE.Mesh(geometry, material);
+        // 2. LOGIQUE DES DEUX MAINS (MediaPipe)
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7 });
 
-                // On applique la position et l'orientation du réticule au cube
-                reticle.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
-                mesh.position.y += 0.1; // On le pose SUR le sol (la moitié de sa hauteur)
-                scene.add(mesh);
-            }
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function animate() {
-            renderer.setAnimationLoop(render);
-        }
-
-        function render(timestamp, frame) {
-            if (frame) {
-                const referenceSpace = renderer.xr.getReferenceSpace();
-                const session = renderer.xr.getSession();
-
-                // 1. On demande au téléphone de détecter les surfaces
-                if (hitTestSourceRequested === false) {
-                    session.requestReferenceSpace('viewer').then((referenceSpace) => {
-                        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
-                            hitTestSource = source;
-                        });
-                    });
-                    hitTestSourceRequested = true;
-                }
-
-                // 2. Si on a une surface, on déplace le réticule dessus
-                if (hitTestSource) {
-                    const hitTestResults = frame.getHitTestResults(hitTestSource);
-                    if (hitTestResults.length) {
-                        const hit = hitTestResults[0];
-                        reticle.visible = true;
-                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-                    } else {
-                        reticle.visible = false;
+        hands.onResults((results) => {
+            if (results.multiHandLandmarks && results.multiHandEntries) {
+                results.multiHandLandmarks.forEach((landmarks, index) => {
+                    const label = results.multiHandEntries[index].label; // "Left" ou "Right"
+                    
+                    // MAIN GAUCHE : On ancre le paquet sur la paume (point 0)
+                    if (label === "Left") {
+                        deck.position.x = (0.5 - landmarks[0].x) * 5;
+                        deck.position.y = (0.5 - landmarks[0].y) * 3;
+                        deck.position.z = -landmarks[0].z * 10;
                     }
-                }
+
+                    // MAIN DROITE : On vérifie le pincement pour piocher
+                    if (label === "Right") {
+                        const thumb = landmarks[4];
+                        const indexF = landmarks[8];
+                        const dist = Math.hypot(thumb.x - indexF.x, thumb.y - indexF.y);
+
+                        if (dist < 0.05) { // PINCH !
+                            isHolding = true;
+                            activeCard.visible = true;
+                            // La carte suit les doigts
+                            activeCard.position.x = (0.5 - indexF.x) * 5;
+                            activeCard.position.y = (0.5 - indexF.y) * 3;
+                            activeCard.rotation.z = Math.atan2(thumb.y - indexF.y, thumb.x - indexF.x);
+                        } else {
+                            if (isHolding) {
+                                // On "lâche" la carte : elle s'envole vers le centre
+                                isHolding = false;
+                                playCardAnimation();
+                            }
+                        }
+                    }
+                });
             }
-            renderer.render(scene, camera);
+        });
+
+        function playCardAnimation() {
+            // Animation simple pour envoyer la carte au milieu
+            const targetPos = new THREE.Vector3(0, 0, -2);
+            const animatePlay = () => {
+                activeCard.position.lerp(targetPos, 0.1);
+                if (activeCard.position.distanceTo(targetPos) > 0.1) {
+                    requestAnimationFrame(animatePlay);
+                } else {
+                    activeCard.visible = false; // La carte est jouée
+                }
+            };
+            animatePlay();
         }
+
+        async function start() {
+            init3D();
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            video.srcObject = stream;
+            await video.play();
+
+            const loop = async () => {
+                await hands.send({image: video});
+                renderer.render(scene, camera);
+                requestAnimationFrame(loop);
+            };
+            loop();
+        }
+
+        start();
     </script>
 </body>
 </html>
