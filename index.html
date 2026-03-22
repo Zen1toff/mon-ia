@@ -3,107 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA Cursor Mobile</title>
-    
+    <title>Air Canvas IA</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
-
     <style>
-        body { 
-            margin: 0; padding: 0; overflow: hidden; 
-            background: #000; font-family: -apple-system, sans-serif; 
-        }
-        
-        /* Vidéo en arrière-plan plein écran */
-        #video { 
-            position: fixed; top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            object-fit: cover;
-            transform: scaleX(-1); /* Effet miroir */
-            z-index: 1;
-        }
-
-        /* Curseur virtuel */
-        #cursor {
-            position: fixed; width: 30px; height: 30px;
-            background: rgba(0, 255, 200, 0.6);
-            border: 3px solid #fff; border-radius: 50%;
-            pointer-events: none; z-index: 9999;
-            display: none; /* Caché tant qu'on ne détecte rien */
-        }
-
-        /* Interface utilisateur */
-        #ui-layer {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10; pointer-events: none;
-            display: flex; flex-direction: column; align-items: center;
-        }
-
-        #status {
-            margin-top: 50px; padding: 10px 20px;
-            background: rgba(0,0,0,0.7); color: white;
-            border-radius: 20px; font-size: 14px;
-        }
-
-        #start-btn {
-            position: fixed; bottom: 50px;
-            padding: 15px 40px; background: #00ffcc;
-            border: none; border-radius: 30px;
-            font-weight: bold; font-size: 18px;
-            pointer-events: auto; cursor: pointer;
-        }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #video { position: fixed; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; opacity: 0.5; }
+        #drawCanvas { position: fixed; top: 0; left: 0; z-index: 5; transform: scaleX(-1); }
+        #ui { position: fixed; top: 20px; width: 100%; z-index: 10; display: flex; justify-content: center; gap: 10px; pointer-events: none; }
+        .btn { padding: 10px 20px; background: white; border-radius: 20px; font-weight: bold; pointer-events: auto; }
+        #start-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; padding: 20px; background: #00ffcc; border: none; border-radius: 10px; font-size: 1.2rem; }
     </style>
 </head>
 <body>
 
-    <video id="video" autoplay playsinline muted></video>
-    <div id="cursor"></div>
-
-    <div id="ui-layer">
-        <div id="status">En attente d'activation...</div>
-        <button id="start-btn">ACTIVER LA CAMÉRA</button>
+    <button id="start-btn">LANCER LE TABLEAU MAGIQUE</button>
+    
+    <div id="ui">
+        <div class="btn" id="status">En attente...</div>
+        <div class="btn" onclick="clearCanvas()" style="background: #ff4444; color: white;">EFFACER</div>
     </div>
+
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="drawCanvas"></canvas>
 
     <script>
         const video = document.getElementById('video');
-        const cursor = document.getElementById('cursor');
+        const canvas = document.getElementById('drawCanvas');
+        const ctx = canvas.getContext('2d');
         const status = document.getElementById('status');
-        const startBtn = document.getElementById('start-btn');
         let detector;
+        let lastPos = null;
 
-        // Configuration du détecteur
-        async function setupDetector() {
-            const model = handPoseDetection.SupportedModels.MediaPipeHands;
-            const detectorConfig = {
-                runtime: 'mediapipe',
-                solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands',
-                modelType: 'lite' // 'lite' est plus rapide sur mobile
-            };
-            return await handPoseDetection.createDetector(model, detectorConfig);
+        async function init() {
+            document.getElementById('start-btn').style.display = 'none';
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            video.srcObject = stream;
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            detector = await handPoseDetection.createDetector(
+                handPoseDetection.SupportedModels.MediaPipeHands, 
+                { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands', modelType: 'lite' }
+            );
+
+            status.innerText = "Prêt : Pincez pour dessiner !";
+            detect();
         }
 
-        // Lancement de la caméra (suite au clic bouton)
-        async function startApp() {
-            startBtn.style.display = 'none';
-            status.innerText = "Chargement de l'IA...";
-
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "user", width: 480, height: 640 },
-                    audio: false
-                });
-                video.srcObject = stream;
-                
-                detector = await setupDetector();
-                status.innerText = "Prêt ! Montrez votre main ✋";
-                cursor.style.display = 'block';
-                
-                detect();
-            } catch (err) {
-                status.innerText = "Erreur : " + err.message;
-                console.error(err);
-            }
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
         async function detect() {
@@ -113,30 +65,34 @@
                 const index = hands[0].keypoints[8];
                 const thumb = hands[0].keypoints[4];
 
-                // Calcul position (inversion X pour le miroir)
-                const x = window.innerWidth - (index.x / video.videoWidth * window.innerWidth);
-                const y = (index.y / video.videoHeight * window.innerHeight);
+                // Coordonnées adaptées à l'écran
+                const x = (index.x / video.videoWidth) * canvas.width;
+                const y = (index.y / video.videoHeight) * canvas.height;
 
-                // Mise à jour curseur
-                cursor.style.left = x + 'px';
-                cursor.style.top = y + 'px';
-
-                // Détection Pincement (Clic)
+                // Calcul distance pince
                 const dist = Math.sqrt(Math.pow(index.x - thumb.x, 2) + Math.pow(index.y - thumb.y, 2));
+
                 if (dist < 45) {
-                    cursor.style.background = "red";
-                    cursor.style.transform = "scale(0.7)";
-                    status.innerText = "CLIC !";
+                    status.innerText = "✍️ Dessin en cours...";
+                    if (lastPos) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = "#00ffcc";
+                        ctx.lineWidth = 8;
+                        ctx.lineCap = "round";
+                        ctx.moveTo(lastPos.x, lastPos.y);
+                        ctx.lineTo(x, y);
+                        ctx.stroke();
+                    }
+                    lastPos = { x, y };
                 } else {
-                    cursor.style.background = "rgba(0, 255, 200, 0.6)";
-                    cursor.style.transform = "scale(1)";
-                    status.innerText = "Déplacement...";
+                    status.innerText = "✋ Main levée (Déplacement)";
+                    lastPos = null;
                 }
             }
             requestAnimationFrame(detect);
         }
 
-        startBtn.addEventListener('click', startApp);
+        document.getElementById('start-btn').addEventListener('click', init);
     </script>
 </body>
 </html>
