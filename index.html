@@ -3,102 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WARZONE HUD - CENDRILLON</title>
+    <title>AOC AUDIO VISUALIZER</title>
     <style>
-        :root { --aoc-red: #ff0000; --bg-dark: #050505; }
-        body { 
-            background: var(--bg-dark); color: white; 
-            font-family: 'Arial Black', Gadget, sans-serif; 
-            margin: 0; padding: 15px; text-align: center;
+        body { background: #000; margin: 0; overflow: hidden; font-family: 'Arial Black', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        .ui-overlay {
+            position: fixed; top: 20px; width: 100%; text-align: center;
+            color: #ff0000; letter-spacing: 5px; text-shadow: 0 0 10px #ff0000;
+            pointer-events: none; font-size: 14px;
         }
-        .header { border-bottom: 2px solid var(--aoc-red); padding-bottom: 8px; margin-bottom: 20px; font-size: 12px; letter-spacing: 3px; }
-        .main-stat { background: rgba(255,0,0,0.05); border: 1px solid #222; padding: 20px; border-radius: 15px; margin-bottom: 20px; }
-        .label { font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
-        .kills-value { font-size: 70px; color: var(--aoc-red); line-height: 1; text-shadow: 0 0 15px rgba(255,0,0,0.5); }
-        .kd-value { font-size: 24px; margin-top: 10px; color: #fff; }
-        
-        .history-title { text-align: left; font-size: 10px; color: #555; margin-bottom: 10px; padding-left: 5px; }
-        .history { background: #111; border-radius: 8px; overflow: hidden; }
-        .match-row { display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid #222; font-size: 13px; }
-        
-        #status-dot { width: 8px; height: 8px; background: #00ff00; border-radius: 50%; display: inline-block; margin-right: 5px; }
-        .footer { position: fixed; bottom: 15px; width: 100%; left: 0; font-size: 9px; color: #333; }
+        #start-btn {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 20px 40px; background: #ff0000; color: #000; border: none;
+            font-weight: bold; border-radius: 5px; cursor: pointer; z-index: 10;
+        }
     </style>
 </head>
 <body>
 
-    <div class="header">SYSTEM_MONITOR // WARZONE</div>
-
-    <div class="main-stat">
-        <div class="label">DERNIER MATCH</div>
-        <div id="last-kills" class="kills-value">--</div>
-        <div id="last-kd" class="kd-value">KD: --</div>
-    </div>
-
-    <div class="history-title">HISTORIQUE DES 3 DERNIERS MATCHS</div>
-    <div id="history-list" class="history">
-        <div class="match-row" style="color:#444">En attente des serveurs Activision...</div>
-    </div>
-
-    <div class="footer">
-        <span id="status-dot"></span> SYNC ACTIVE - USER: CENDRILLON#6226996
-    </div>
+    <div class="ui-overlay">AOC TACTICAL AUDIO MONITOR</div>
+    <button id="start-btn">ACTIVER MICRO</button>
+    <canvas id="visualizer"></canvas>
 
     <script>
-        // Tes accès RapidAPI
-        const apiKey = "ef1c928289mshe66a2f22245a488p1a33efjsn81a14b17f475";
-        const player = "Cendrillon%236226996";
+        const btn = document.getElementById('start-btn');
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
 
-        async function fetchWarzoneData() {
-            console.log("Tentative de synchronisation...");
-            try {
-                const response = await fetch(`https://call-of-duty-modern-warfare.p.rapidapi.com/warzone-matches/${player}/psn`, {
-                    method: 'GET',
-                    headers: {
-                        'x-rapidapi-key': apiKey,
-                        'x-rapidapi-host': 'call-of-duty-modern-warfare.p.rapidapi.com'
+        btn.addEventListener('click', () => {
+            btn.style.display = 'none';
+            initAudio();
+        });
+
+        function initAudio() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const analyser = audioCtx.createAnalyser();
+            
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                const source = audioCtx.createMediaStreamSource(stream);
+                source.connect(analyser);
+                analyser.fftSize = 64; // Nombre de barres
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+
+                function draw() {
+                    requestAnimationFrame(draw);
+                    analyser.getByteFrequencyData(dataArray);
+
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    const barWidth = (canvas.width / bufferLength) * 0.8;
+                    let barHeight;
+                    let x = 0;
+
+                    for (let i = 0; i < bufferLength; i++) {
+                        barHeight = dataArray[i] * 2.5;
+                        
+                        // Couleur Rouge AOC avec dégradé
+                        ctx.fillStyle = `rgb(${dataArray[i] + 100}, 0, 0)`;
+                        ctx.shadowBlur = 15;
+                        ctx.shadowColor = "#ff0000";
+                        
+                        // Dessin de la barre
+                        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                        x += barWidth + 5;
                     }
-                });
-                
-                const data = await response.json();
-                
-                if (data && data.matches && data.matches.length > 0) {
-                    const matches = data.matches;
-
-                    // 1. Affichage du match le plus récent
-                    document.getElementById('last-kills').innerText = matches[0].playerStats.kills;
-                    document.getElementById('last-kd').innerText = "KD: " + matches[0].playerStats.kdRatio.toFixed(2);
-
-                    // 2. Construction de l'historique
-                    let historyHTML = "";
-                    const limit = Math.min(matches.length, 3); // On prend les 3 premiers
-                    for(let i=0; i < limit; i++) {
-                        let m = matches[i];
-                        let mode = m.mode.replace('br_', '').toUpperCase(); // Nettoie le nom du mode
-                        historyHTML += `
-                            <div class="match-row">
-                                <span style="color:#666">${mode}</span>
-                                <span style="color:var(--aoc-red); font-weight:bold;">${m.playerStats.kills} KILLS</span>
-                                <span>${m.playerStats.kdRatio.toFixed(2)} KD</span>
-                            </div>`;
-                    }
-                    document.getElementById('history-list').innerHTML = historyHTML;
-                    console.log("Données mises à jour avec succès.");
-                } else {
-                    document.getElementById('history-list').innerHTML = "<div class='match-row'>Aucune donnée trouvée. Vérifie ton mode Public.</div>";
                 }
-
-            } catch (error) {
-                console.error("Erreur de connexion à l'API");
-                document.getElementById('history-list').innerHTML = "<div class='match-row' style='color:red'>ERREUR DE SYNC</div>";
-            }
+                draw();
+            }).catch(err => console.error("Erreur Micro:", err));
         }
-
-        // Première exécution
-        fetchWarzoneData();
-
-        // Actualisation toutes les 2 minutes (Warzone met du temps à enregistrer les fins de matchs)
-        setInterval(fetchWarzoneData, 120000);
     </script>
 </body>
 </html>
