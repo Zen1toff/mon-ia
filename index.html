@@ -1,32 +1,38 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ma Carte Twisto - Caen</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        #map { height: 100vh; width: 100%; }
-        body { margin: 0; }
-    </style>
-</head>
-<body>
+// URL de l'API Open Data de Caen (Jeu de données : Arrêts de transport)
+const urlTwisto = "https://data.twisto.fr/api/explore/v2.1/catalog/datasets/gtfs-stops-twisto/records?limit=50";
 
-    <div id="map"></div>
+async function chargerStations() {
+    try {
+        const response = await fetch(urlTwisto);
+        const data = await response.json();
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        // 1. Initialiser la carte sur Caen
-        const map = L.map('map').setView([49.1828, -0.3707], 13);
+        // On boucle sur chaque station reçue
+        data.results.forEach(station => {
+            const lat = station.stop_lat;
+            const lon = station.stop_lon;
+            const nom = station.stop_name;
 
-        // 2. Ajouter le fond de carte (OpenStreetMap)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+            // Création du marqueur sur la carte
+            const marker = L.marker([lat, lon]).addTo(map);
+            
+            // On ajoute une popup avec le nom et un bouton pour le temps réel
+            marker.bindPopup(`
+                <b>${nom}</b><br>
+                <button onclick="getTempsReel('${station.stop_id}')">Voir les prochains passages</button>
+                <div id="info-${station.stop_id}"></div>
+            `);
+        });
+    } catch (error) {
+        console.error("Erreur lors de la récupération des stations :", error);
+    }
+}
 
-        // 3. Exemple : Ajouter un marqueur pour la station "Bernières"
-        const bernieres = L.marker([49.1824, -0.3589]).addTo(map);
-        bernieres.bindPopup("<b>Station Bernières</b><br>Chargement des temps Twisto...");
-    </script>
-</body>
-</html>
+// Lancer le chargement au démarrage
+chargerStations();
+
+// Fonction (vide pour l'instant) pour le temps réel
+function getTempsReel(stopId) {
+    const div = document.getElementById(`info-${stopId}`);
+    div.innerHTML = "<br><i>Recherche des horaires...</i>";
+    // C'est ici qu'on appellera l'API des temps de passage plus tard !
+}
