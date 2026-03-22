@@ -1,32 +1,88 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>PS5 Mouse Control</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warzone Live Tracker - Cendrillon</title>
     <style>
-        body { background: #000; color: white; text-align: center; font-family: sans-serif; }
-        .btn { 
-            width: 200px; height: 200px; border-radius: 50%; 
-            background: #003087; color: white; border: none;
-            font-size: 20px; cursor: pointer; margin-top: 50px;
-            box-shadow: 0 0 20px #0072ce;
+        body { 
+            background-color: #050505; 
+            color: #ff0000; 
+            font-family: 'Segoe UI', Roboto, sans-serif; 
+            text-align: center; 
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100vh;
         }
+        .container {
+            border: 2px solid #ff0000;
+            margin: 15px;
+            padding: 20px;
+            border-radius: 10px;
+            background: linear-gradient(145deg, #1a1a1a, #000);
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
+        }
+        .label { font-size: 0.9em; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+        .value { font-size: 4em; font-weight: bold; margin: 10px 0; text-shadow: 2px 2px #330000; }
+        .kd-box { color: #fff; font-size: 2em; }
+        .footer { font-size: 0.6em; color: #444; margin-top: 20px; }
+        #loader { width: 0%; height: 4px; background: #ff0000; position: fixed; top: 0; transition: width 0.5s; }
     </style>
 </head>
 <body>
-    <h1>Contrôleur USB PS5</h1>
-    <button class="btn" onclick="moveRight()">DÉPLACER À DROITE</button>
+    <div id="loader"></div>
+    
+    <div class="container">
+        <div class="label">Dernière Game : Kills</div>
+        <div id="kills" class="value">--</div>
+        
+        <div class="label">Ratio K/D</div>
+        <div id="kd" class="kd-box">--</div>
+    </div>
+
+    <div class="footer">BRANCHÉ EN USB-C À LA PS5 - CONNECTÉ À L'API RAPIDAPI</div>
 
     <script>
-        async function moveRight() {
-            console.log("Envoi de la commande : Droite");
-            // Ici, on ajoute la logique pour envoyer "R" (Right) 
-            // via Bluetooth à ton adaptateur USB branché sur la console
-            if (deviceConnected) {
-                await characteristic.writeValue(new TextEncoder().encode("R"));
-            } else {
-                alert("Connecte ton adaptateur USB d'abord !");
+        // Tes vraies infos extraites de ta capture
+        const apiKey = "ef1c928289mshe66a2f22245a488p1a33efjsn81a14b17f475";
+        const player = "Cendrillon%236226996"; 
+
+        async function refreshStats() {
+            document.getElementById('loader').style.width = "50%";
+            
+            // On interroge l'endpoint "Warzone Matches" pour avoir le dernier match
+            const url = `https://call-of-duty-modern-warfare.p.rapidapi.com/warzone-matches/${player}/psn`;
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'x-rapidapi-key': apiKey,
+                        'x-rapidapi-host': 'call-of-duty-modern-warfare.p.rapidapi.com'
+                    }
+                });
+                const data = await response.json();
+                
+                // On récupère le match le plus récent [0]
+                const lastMatch = data.matches[0];
+                
+                document.getElementById('kills').innerText = lastMatch.playerStats.kills;
+                document.getElementById('kd').innerText = lastMatch.playerStats.kdRatio.toFixed(2);
+                
+                document.getElementById('loader').style.width = "100%";
+                setTimeout(() => { document.getElementById('loader').style.width = "0%"; }, 1000);
+                
+            } catch (err) {
+                console.error("Erreur de chargement des stats");
+                document.getElementById('kills').innerText = "ERR";
             }
         }
+
+        // Lancement auto toutes les 2 minutes (120000 ms)
+        refreshStats();
+        setInterval(refreshStats, 120000);
     </script>
 </body>
 </html>
