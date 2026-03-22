@@ -1,132 +1,93 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Wireframe IA</title>
+    <meta charset="utf-8">
+    <title>3D Hand AR Cube</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
-    
     <style>
-        :root { --neon: #00ffcc; --error: #ff4444; }
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        
-        /* Barre d'erreur / État */
-        #status-bar {
-            position: fixed; top: 0; width: 100%; height: 45px;
-            background: rgba(0,0,0,0.8); display: flex; align-items: center; 
-            justify-content: center; font-weight: bold; z-index: 100;
-            border-bottom: 2px solid var(--neon); transition: 0.3s;
-        }
-        .error-active { background: var(--error) !important; border-bottom: 2px solid white !important; }
-
-        /* Écran de chargement */
-        #loader {
-            position: fixed; inset: 0; background: #0a0a0a;
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center; z-index: 200;
-        }
-        .spinner {
-            width: 50px; height: 50px; border: 5px solid #222;
-            border-top: 5px solid var(--neon); border-radius: 50%;
-            animation: spin 1s linear infinite; margin-bottom: 15px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* Rendu */
-        canvas { width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); }
+        body { margin: 0; overflow: hidden; background: #000; }
+        #status { position: fixed; top: 10px; width: 100%; text-align: center; color: #00ffcc; z-index: 10; font-family: monospace; }
+        canvas { position: absolute; inset: 0; }
         video { display: none; }
     </style>
 </head>
 <body>
-
-    <div id="status-bar">INITIALISATION DE L'IA...</div>
-
-    <div id="loader">
-        <div class="spinner"></div>
-        <p>Chargement des modèles de la main...</p>
-    </div>
-
-    <canvas id="output"></canvas>
+    <div id="status">INITIALISATION DU MONDE 3D...</div>
     <video id="webcam" playsinline></video>
-
+    
     <script>
+        let scene, camera, renderer, cube;
+        let isPinching = false;
         const video = document.getElementById('webcam');
-        const canvas = document.getElementById('output');
-        const ctx = canvas.getContext('2d');
-        const statusBar = document.getElementById('status-bar');
-        const loader = document.getElementById('loader');
 
-        function handleError(msg) {
-            statusBar.innerText = "ERREUR : " + msg;
-            statusBar.classList.add('error-active');
-            loader.style.display = "none";
+        // 1. SCÈNE THREE.JS
+        function init3D() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Création du Cube 3D
+            const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const material = new THREE.MeshPhongMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8 });
+            cube = new THREE.Mesh(geometry, material);
+            cube.position.z = -2; // Placé à 2 mètres devant
+            scene.add(cube);
+
+            // Lumière
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(1, 1, 1).normalize();
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040));
         }
 
-        async function startTracking() {
-            // 1. Initialiser le modèle Hands
-            const hands = new Hands({
-                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-            });
+        // 2. LOGIQUE DE PINCEMENT (HAND TRACKING)
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7 });
 
-            hands.setOptions({
-                maxNumHands: 2,
-                modelComplexity: 1,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
+        hands.onResults((results) => {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const hand = results.multiHandLandmarks[0];
+                const thumb = hand[4];
+                const index = hand[8];
 
-            // 2. Définir le dessin du Wireframe
-            hands.onResults((results) => {
-                // Cacher le loader dès la première détection réussie
-                loader.style.display = "none";
-                statusBar.innerText = results.multiHandLandmarks.length > 0 ? "MAINS DÉTECTÉES" : "PRÉSENTEZ VOS MAINS";
-
-                ctx.save();
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Calcul distance Pouce-Index
+                const dist = Math.hypot(thumb.x - index.x, thumb.y - index.y);
                 
-                // Dessiner la vidéo en fond (optionnel, enlève si tu veux juste le noir)
-                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-                if (results.multiHandLandmarks) {
-                    for (const landmarks of results.multiHandLandmarks) {
-                        // Dessiner les connexions (Wireframe)
-                        drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffcc', lineWidth: 4});
-                        // Dessiner les points (Landmarks)
-                        drawLandmarks(ctx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 3});
-                    }
+                // Si distance faible = Pincement
+                if (dist < 0.05) {
+                    isPinching = true;
+                    cube.material.color.setHex(0xff00ff); // Change de couleur quand on attrape
+                    
+                    // Déplacement du cube (Conversion coordonnées écran -> 3D)
+                    cube.position.x = (0.5 - index.x) * 4;
+                    cube.position.y = (0.5 - index.y) * 4;
+                } else {
+                    isPinching = false;
+                    cube.material.color.setHex(0x00ffcc);
                 }
-                ctx.restore();
-            });
-
-            // 3. Lancer la caméra
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user", width: 1280, height: 720 } 
-                });
-                video.srcObject = stream;
-                await video.play();
-
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-
-                const sendToIA = async () => {
-                    await hands.send({image: video});
-                    requestAnimationFrame(sendToIA);
-                };
-                sendToIA();
-
-            } catch (err) {
-                handleError("Accès caméra refusé");
+                document.getElementById('status').innerText = isPinching ? "CUBE ATTRAPÉ !" : "PINCEZ LE CUBE";
             }
+        });
+
+        // 3. LANCEMENT
+        async function start() {
+            init3D();
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = stream;
+            await video.play();
+
+            const loop = async () => {
+                await hands.send({image: video});
+                renderer.render(scene, camera);
+                requestAnimationFrame(loop);
+            };
+            loop();
         }
 
-        // Vérifier si le navigateur supporte l'IA
-        if (window.navigator.mediaDevices) {
-            startTracking();
-        } else {
-            handleError("Navigateur non compatible");
-        }
+        start();
     </script>
 </body>
 </html>
