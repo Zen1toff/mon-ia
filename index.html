@@ -2,13 +2,13 @@
 <html lang="fr">
 <head>
     <meta charset="utf-8">
-    <title>UNO 3D Fix</title>
+    <title>UNO 3D Interaction</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #info { position: fixed; top: 10px; width: 100%; text-align: center; color: #00ffcc; z-index: 10; font-family: monospace; }
-        video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.4; }
+        video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: -1; opacity: 0.5; }
         canvas { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
     </style>
 </head>
@@ -17,9 +17,12 @@
     <video id="webcam" playsinline></video>
 
     <script>
-        let scene, camera, renderer, deck;
+        let scene, camera, renderer, deck, activeCard;
         const video = document.getElementById('webcam');
+        let isPinching = false;
+        let piocherPermis = false;
 
+        // --- 1. CONFIGURATION 3D (THREE.JS) ---
         function init3D() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -27,19 +30,27 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // CRÉATION DU PAQUET (Plus gros pour éviter l'effet "ligne")
-            const geometry = new THREE.BoxGeometry(0.5, 0.4, 0.1); // Largeur, Hauteur, Épaisseur
-            const material = new THREE.MeshPhongMaterial({ color: 0xed1c24, emissive: 0x330000 });
-            deck = new THREE.Mesh(geometry, material);
+            // CRÉATION DU PAQUET (Épais pour qu'il soit visible)
+            const deckGeom = new THREE.BoxGeometry(0.5, 0.4, 0.1); // Largeur, Hauteur, Épaisseur
+            const deckMat = new THREE.MeshPhongMaterial({ color: 0xed1c24, emissive: 0x330000 });
+            deck = new THREE.Mesh(deckGeom, deckMat);
             scene.add(deck);
+
+            // CRÉATION DE LA CARTE ACTIVE (Celle qu'on pioche)
+            const cardGeom = new THREE.PlaneGeometry(0.35, 0.55);
+            const cardMat = new THREE.MeshPhongMaterial({ color: 0x00ff00, side: THREE.DoubleSide }); // Carte verte
+            activeCard = new THREE.Mesh(cardGeom, cardMat);
+            activeCard.visible = false;
+            scene.add(activeCard);
 
             const light = new THREE.DirectionalLight(0xffffff, 1);
             light.position.set(0, 1, 2);
             scene.add(light);
             scene.add(new THREE.AmbientLight(0x404040));
-            camera.position.z = 2;
+            camera.position.z = 2; // On recule la caméra
         }
 
+        // --- 2. LOGIQUE DES MAINS (MEDIAPIPE) ---
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
         hands.setOptions({ 
             maxNumHands: 2, 
@@ -49,26 +60,60 @@
         });
 
         hands.onResults((results) => {
-            renderer.render(scene, camera);
-            
             if (results.multiHandLandmarks && results.multiHandedness) {
+                // Pour chaque main détectée...
                 results.multiHandLandmarks.forEach((landmarks, index) => {
                     const isLeft = results.multiHandedness[index].label === "Right"; // MediaPipe inverse souvent Left/Right en miroir
 
                     if (isLeft) {
-                        // Positionner le paquet sur la paume (point 9 - base du majeur)
-                        // Conversion coordonées 0-1 vers Three.js
+                        // POSITION GAUCHE : On ancre le paquet sur la paume (point 9 - base du majeur)
                         deck.position.x = (0.5 - landmarks[9].x) * 4; 
                         deck.position.y = (0.5 - landmarks[9].y) * 3;
                         deck.position.z = -landmarks[9].z * 5;
-
-                        // Rotation du paquet selon l'inclinaison de la main
                         deck.rotation.z = Math.atan2(landmarks[17].y - landmarks[5].y, landmarks[17].x - landmarks[5].x);
-                        deck.rotation.x = landmarks[9].z * 10;
+                    } else {
+                        // POSITION DROITE : On vérifie le pincement (dist < 0.05)
+                        const thumb = landmarks[4];
+                        const indexF = landmarks[8];
+                        const dist = Math.hypot(thumb.x - indexF.x, thumb.y - indexF.y);
+
+                        if (dist < 0.05) { // PINCH !
+                            if (!isPinching) {
+                                isPinching = true;
+                                activeCard.visible = true; // La carte apparaît
+                                activeCard.material.color.setHex(0x00ff00); // Carte Verte
+                            }
+                            // La carte suit tes doigts
+                            activeCard.position.x = (0.5 - indexF.x) * 4;
+                            activeCard.position.y = (0.5 - indexF.y) * 3;
+                            activeCard.position.z = -indexF.z * 5;
+                            activeCard.rotation.z = Math.atan2(thumb.y - indexF.y, thumb.x - indexF.x);
+                        } else {
+                            if (isPinching) {
+                                // On lâche le pincement : on lance la carte !
+                                isPinching = false;
+                                animatePlay();
+                            }
+                        }
                     }
                 });
             }
+            renderer.render(scene, camera);
         });
+
+        function animatePlay() {
+            // Animation : La carte est propulsée vers le centre
+            const targetPos = new THREE.Vector3(0, 0, -2);
+            const animate = () => {
+                activeCard.position.lerp(targetPos, 0.1);
+                if (activeCard.position.distanceTo(targetPos) > 0.05) {
+                    requestAnimationFrame(animate);
+                } else {
+                    activeCard.visible = false; // La carte est jouée
+                }
+            };
+            animate();
+        }
 
         async function start() {
             init3D();
