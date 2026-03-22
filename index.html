@@ -2,233 +2,131 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA FaceSwap Ultra-Réaliste</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Wireframe IA</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    
     <style>
-        :root { --primary: #00ffcc; --bg: #050505; --error: #ff4444; }
-        body { margin: 0; background: var(--bg); color: white; font-family: -apple-system, sans-serif; overflow: hidden; }
+        :root { --neon: #00ffcc; --error: #ff4444; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         
-        /* Barre d'état */
+        /* Barre d'erreur / État */
         #status-bar {
-            position: fixed; top: 0; width: 100%; height: 50px;
-            background: rgba(0,0,0,0.9); display: flex; align-items: center; 
-            justify-content: center; font-weight: bold; z-index: 101; text-transform: uppercase;
-            letter-spacing: 1px; border-bottom: 2px solid var(--primary); font-size: 13px;
+            position: fixed; top: 0; width: 100%; height: 45px;
+            background: rgba(0,0,0,0.8); display: flex; align-items: center; 
+            justify-content: center; font-weight: bold; z-index: 100;
+            border-bottom: 2px solid var(--neon); transition: 0.3s;
         }
-        .error-mode { border-bottom: 2px solid var(--error) !important; color: var(--error); }
+        .error-active { background: var(--error) !important; border-bottom: 2px solid white !important; }
 
-        /* Écran de chargement et Menu */
-        #overlay { 
-            position: fixed; inset: 0; z-index: 100; 
-            display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            background: var(--bg); padding: 20px; text-align: center; transition: 0.5s;
+        /* Écran de chargement */
+        #loader {
+            position: fixed; inset: 0; background: #0a0a0a;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 200;
         }
+        .spinner {
+            width: 50px; height: 50px; border: 5px solid #222;
+            border-top: 5px solid var(--neon); border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        #canvas-container { position: fixed; inset: 0; z-index: 1; display: none; }
-        canvas { width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); } /* Effet miroir */
-        
-        .btn { 
-            padding: 18px 35px; background: var(--primary); border: none; 
-            border-radius: 12px; font-weight: bold; color: #000; cursor: pointer; font-size: 1rem;
-        }
-
-        /* Indicateur de calibration */
-        #step-box {
-            margin-top: 20px; padding: 20px; border: 1px solid #222; border-radius: 12px;
-            width: 80%; max-width: 320px; background: rgba(255,255,255,0.03); display: none;
-        }
-        .step { opacity: 0.3; margin: 8px 0; transition: 0.3s; font-size: 13px; }
-        .active-step { opacity: 1; color: var(--primary); font-weight: bold; transform: scale(1.05); }
+        /* Rendu */
+        canvas { width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); }
+        video { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="status-bar">INSTALLATION...</div>
+    <div id="status-bar">INITIALISATION DE L'IA...</div>
 
-    <div id="overlay">
-        <div id="menu-init">
-            <h2>SCANNER FACEWRAP ULTRA</h2>
-            <p style="color: #888; margin-bottom: 30px;">Pour un résultat optimal, importez un visage de face</p>
-            <input type="file" id="file-input" accept="image/*" style="display: none;">
-            <button class="btn" onclick="document.getElementById('file-input').click()">1. CHOISIR UNE PHOTO</button>
-            <br>
-            <button id="start-btn" class="btn" style="display:none; background:white; margin-top:20px;">2. DÉMARRER LA SYNC</button>
-        </div>
-
-        <div id="step-box">
-            <div id="step-face" class="step active-step">1. RESTER FACE</div>
-            <div id="step-left" class="step">2. TOURNER À GAUCHE</div>
-            <div id="step-right" class="step">3. TOURNER À DROITE</div>
-            <div id="step-up" class="step">4. MENTON LEVÉ</div>
-        </div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <p>Chargement des modèles de la main...</p>
     </div>
 
-    <div id="canvas-container">
-        <canvas id="output"></canvas>
-    </div>
-    
-    <video id="webcam" autoplay playsinline muted style="display:none;"></video>
+    <canvas id="output"></canvas>
+    <video id="webcam" playsinline></video>
 
     <script>
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('output');
         const ctx = canvas.getContext('2d');
         const statusBar = document.getElementById('status-bar');
-        
-        let targetImg = new Image();
-        let faceMesh;
-        let currentStep = 'face'; 
-        let calibrationProgress = 0;
+        const loader = document.getElementById('loader');
 
-        // --- 1. CONFIGURATION IA & CHARGEMENT ---
-        async function setupIA() {
-            try {
-                faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-                faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6 });
+        function handleError(msg) {
+            statusBar.innerText = "ERREUR : " + msg;
+            statusBar.classList.add('error-active');
+            loader.style.display = "none";
+        }
 
-                faceMesh.onResults((results) => {
-                    ctx.save();
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height); // Fond : ta caméra
+        async function startTracking() {
+            // 1. Initialiser le modèle Hands
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
 
-                    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                        const points = results.multiFaceLandmarks[0];
-                        statusBar.classList.remove('error-mode');
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
 
-                        if (currentStep !== 'done') {
-                            // PHASE CALIBRATION (On vérifie la pose)
-                            if (checkPose(points)) {
-                                calibrationProgress++;
-                                if (calibrationProgress > 50) nextStep(); // Maintenir 1.5s
-                            } else {
-                                calibrationProgress = 0;
-                            }
-                        } else {
-                            // PHASE SWAP ULTRA (Morphing intelligent)
-                            renderMorph(points);
-                            document.getElementById('overlay').style.opacity = "0";
-                            setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
-                        }
-                    } else {
-                        statusBar.innerText = "ERREUR : VISAGE PERDU";
-                        statusBar.classList.add('error-mode');
-                        calibrationProgress = 0;
+            // 2. Définir le dessin du Wireframe
+            hands.onResults((results) => {
+                // Cacher le loader dès la première détection réussie
+                loader.style.display = "none";
+                statusBar.innerText = results.multiHandLandmarks.length > 0 ? "MAINS DÉTECTÉES" : "PRÉSENTEZ VOS MAINS";
+
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Dessiner la vidéo en fond (optionnel, enlève si tu veux juste le noir)
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+                if (results.multiHandLandmarks) {
+                    for (const landmarks of results.multiHandLandmarks) {
+                        // Dessiner les connexions (Wireframe)
+                        drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffcc', lineWidth: 4});
+                        // Dessiner les points (Landmarks)
+                        drawLandmarks(ctx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 3});
                     }
-                    ctx.restore();
-                });
-                statusBar.innerText = "IA PRÊTE. IMPORTEZ IMAGE.";
-            } catch (e) {
-                statusBar.innerText = "ERREUR CHARGEMENT IA";
-                statusBar.classList.add('error-mode');
-            }
-        }
+                }
+                ctx.restore();
+            });
 
-        // --- 2. IMPORTATION & ANALYSE IMAGE CIBLE ---
-        document.getElementById('file-input').onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (f) => {
-                targetImg.onload = () => {
-                    document.getElementById('start-btn').style.display = "inline-block";
-                    statusBar.innerText = "IMAGE CIBLE ANALYSÉE OK";
-                };
-                targetImg.src = f.target.result;
-            };
-            reader.readAsDataURL(file);
-        };
-
-        // --- 3. LOGIQUE DE CALIBRATION ---
-        function checkPose(points) {
-            const nose = points[1].x;
-            const yaw = (nose - points[234].x) / (points[454].x - points[234].x); // Rotation
-            const pitch = (points[1].y - points[10].y) / (points[152].y - points[10].y); // Inclinaison
-
-            if (currentStep === 'face') return (yaw > 0.4 && yaw < 0.6 && pitch > 0.4 && pitch < 0.6);
-            if (currentStep === 'left') return yaw < 0.35;
-            if (currentStep === 'right') return yaw > 0.65;
-            if (currentStep === 'up') return pitch < 0.35;
-            return false;
-        }
-
-        function nextStep() {
-            calibrationProgress = 0;
-            document.querySelectorAll('.step').forEach(s => s.classList.remove('active-step'));
-            if (currentStep === 'face') { currentStep = 'left'; activate('step-left', "TOURNEZ À GAUCHE"); }
-            else if (currentStep === 'left') { currentStep = 'right'; activate('step-right', "TOURNEZ À DROITE"); }
-            else if (currentStep === 'right') { currentStep = 'up'; activate('step-up', "LEVEZ LE MENTON"); }
-            else { currentStep = 'done'; statusBar.innerText = "SYNC ULTRA ACTIVE ✨"; activate('', ''); }
-        }
-
-        function activate(id, text) { 
-            if(id) document.getElementById(id).classList.add('active-step'); 
-            if(text) statusBar.innerText = text; 
-        }
-
-        // --- 4. LE MOTEUR DE MORPHING (Triangulation Invisible) ---
-        function renderMorph(points) {
-            // Création du masque de ton visage (Délourage souple)
-            ctx.beginPath();
-            const ovalIdx = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
-            ctx.moveTo(points[10].x * canvas.width, points[10].y * canvas.height);
-            ovalIdx.forEach(i => ctx.lineTo(points[i].x * canvas.width, points[i].y * canvas.height));
-            ctx.closePath();
-            ctx.clip(); // Tout ce qui est dessiné après ne sera visible QUE dans ton visage
-
-            // Calcul du maillage dynamique (Bounding Box)
-            const xCoords = points.map(p => p.x * canvas.width);
-            const yCoords = points.map(p => p.y * canvas.height);
-            
-            const xMin = Math.min(...xCoords);
-            const xMax = Math.max(...xCoords);
-            const yMin = Math.min(...yCoords);
-            const yMax = Math.max(...yCoords);
-
-            // On déforme l'image importée pour qu'elle s'aligne sur tes traits
-            // On ajoute une marge pour éviter les bords vides
-            ctx.drawImage(
-                targetImg, 
-                xMin - (xMax-xMin)*0.1, yMin - (yMax-yMin)*0.15, // Marge front/joues
-                (xMax-xMin)*1.2, (yMax-yMin)*1.25 // Agrandissement
-            );
-        }
-
-        // --- 5. DÉMARRAGE CAMÉRA ---
-        document.getElementById('start-btn').onclick = async () => {
-            document.getElementById('menu-init').style.display = 'none';
-            document.getElementById('step-box').style.display = 'block';
-            document.getElementById('canvas-container').style.display = 'block';
-            statusBar.innerText = "DÉMARRAGE CAMÉRA...";
-            
+            // 3. Lancer la caméra
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user", width: 640, height: 480 },
-                    audio: false
+                    video: { facingMode: "user", width: 1280, height: 720 } 
                 });
                 video.srcObject = stream;
-                
-                // Forcer la lecture sur iPhone
                 await video.play();
-                statusBar.innerText = "RESTER FACE POUR COMMENCER";
 
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    const loop = async () => {
-                        if (video.readyState >= 2) await faceMesh.send({image: video});
-                        requestAnimationFrame(loop);
-                    };
-                    loop();
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                const sendToIA = async () => {
+                    await hands.send({image: video});
+                    requestAnimationFrame(sendToIA);
                 };
-            } catch (err) {
-                statusBar.innerText = "ACCÈS CAMÉRA REFUSÉ";
-                statusBar.classList.add('error-mode');
-            }
-        };
+                sendToIA();
 
-        // Lancement automatique de l'IA au chargement
-        window.onload = setupIA;
+            } catch (err) {
+                handleError("Accès caméra refusé");
+            }
+        }
+
+        // Vérifier si le navigateur supporte l'IA
+        if (window.navigator.mediaDevices) {
+            startTracking();
+        } else {
+            handleError("Navigateur non compatible");
+        }
     </script>
 </body>
 </html>
