@@ -2,121 +2,109 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Spy-Cam IA : Bio-Monitor</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IA Vision Totale - Analyse de Surface</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
     <style>
-        body { margin: 0; background: #000; color: #ff3300; font-family: 'Courier New', monospace; overflow: hidden; }
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; border-left: 2px solid #ff3300; padding-left: 15px; background: rgba(0,0,0,0.5); }
-        .mode-selector { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; z-index: 100; }
-        button { padding: 15px 25px; background: none; border: 1px solid #ff3300; color: #ff3300; cursor: pointer; text-transform: uppercase; font-weight: bold; }
-        button:hover { background: #ff3300; color: #000; }
-        #video-preview { position: absolute; bottom: 10px; right: 10px; width: 150px; border: 1px solid #ff3300; display: none; }
-        canvas { display: block; filter: saturate(1.5) contrast(1.2); }
+        body { margin: 0; background: #000; color: #0f0; overflow: hidden; font-family: 'Courier New', monospace; }
+        canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; }
+        .ui-overlay {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            background: rgba(0, 255, 0, 0.1); border-left: 3px solid #0f0;
+            padding: 10px; pointer-events: none; text-transform: uppercase; font-size: 12px;
+        }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    [ SYSTEM: <span id="sys-status">OFFLINE</span> ]<br>
-    [ SIGNAL: <span id="sig-strength">0%</span> ]<br>
-    [ TARGET: <span id="target-id">UNKNOWN</span> ]
+<div class="ui-overlay">
+    Système : Actif<br>
+    Scan de surface : En cours...<br>
+    Mode : Analyse de texture & segmentation
 </div>
 
-<video id="video-preview" autoplay playsinline muted></video>
-
-<div class="mode-selector" id="setup">
-    <button onclick="initPC()">ACTIVER STATION PC</button>
-    <button onclick="initMobile()">ACTIVER CAPTEUR MOBILE</button>
-</div>
+<video id="video" autoplay playsinline muted style="display:none;"></video>
+<canvas id="canvas"></canvas>
 
 <script>
-    const SESSION_ID = "spy-net-77"; // Identifiant de liaison
-    let peer, conn;
-    const sysStatus = document.getElementById('sys-status');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let model;
 
-    // --- LOGIQUE 3D (PC) ---
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    // Création d'un "Squelette" de points
-    const pointsGroup = new THREE.Group();
-    const dots = [];
-    for(let i=0; i<33; i++) {
-        const dot = new THREE.Mesh(
-            new THREE.SphereGeometry(0.08, 8, 8),
-            new THREE.MeshBasicMaterial({ color: 0xff3300 })
-        );
-        dots.push(dot);
-        pointsGroup.add(dot);
-    }
-    scene.add(pointsGroup);
-    camera.position.z = 3;
-
-    function updateSkeleton(landmarks) {
-        landmarks.forEach((lm, i) => {
-            dots[i].position.set((lm.x - 0.5) * 4, (lm.y - 0.5) * -4, lm.z * 2);
+    // Configuration de la caméra iPhone (arrière)
+    async function setupCamera() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false,
+        });
+        video.srcObject = stream;
+        return new Promise((resolve) => {
+            video.onloadedmetadata = () => resolve(video);
         });
     }
 
-    // --- LOGIQUE RÉSEAU & IA ---
-    function initPC() {
-        document.getElementById('setup').style.display = 'none';
-        peer = new Peer(SESSION_ID);
-        sysStatus.innerText = "WAITING FOR CAPTURE...";
+    async function detect() {
+        const predictions = await model.detect(video);
         
-        peer.on('connection', (c) => {
-            conn = c;
-            sysStatus.innerText = "LINK ESTABLISHED";
-            document.getElementById('target-id').innerText = "HUMAN_01";
-            conn.on('data', (data) => updateSkeleton(data));
-        });
-    }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 1. Dessiner le flux vidéo original
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    async function initMobile() {
-        document.getElementById('setup').style.display = 'none';
-        document.getElementById('video-preview').style.display = 'block';
-        sysStatus.innerText = "CONNECTING TO STATION...";
+        // 2. Ajouter un filtre "Scan" (assombrit légèrement pour faire ressortir l'IA)
+        ctx.fillStyle = "rgba(0, 40, 0, 0.2)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        peer = new Peer();
-        conn = peer.connect(SESSION_ID);
+        predictions.forEach(prediction => {
+            const [x, y, width, height] = prediction.bbox;
+            
+            // Dessiner le rectangle de détection (Bounding Box)
+            ctx.strokeStyle = "#0f0";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
 
-        // Configuration MediaPipe Pose
-        const pose = new Pose({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-        });
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true });
-        pose.onResults((results) => {
-            if (results.poseLandmarks && conn.open) {
-                conn.send(results.poseLandmarks);
+            // Effet de "data" qui défile (comme sur tes photos)
+            ctx.fillStyle = "#0f0";
+            ctx.font = "10px monospace";
+            
+            // On génère des fausses données techniques pour le style
+            for(let i = 0; i < 5; i++) {
+                const randomId = Math.floor(Math.random() * 99999);
+                ctx.fillText(`ID_${randomId} POS_Z:${(Math.random()).toFixed(4)}`, x + 5, y + (i * 12) + 15);
             }
+
+            // Étiquette de l'objet
+            ctx.fillText(`> ${prediction.class.toUpperCase()} [${Math.round(prediction.score * 100)}%]`, x, y - 10);
         });
 
-        const videoElement = document.getElementById('video-preview');
-        const cameraPipe = new Camera(videoElement, {
-            onFrame: async () => { await pose.send({image: videoElement}); },
-            width: 640, height: 480, facingMode: "environment"
-        });
-        cameraPipe.start();
+        // Simuler des points de scan sur toute la surface (pour l'effet bois/papier)
+        for (let i = 0; i < 15; i++) {
+            const sx = Math.random() * canvas.width;
+            const sy = Math.random() * canvas.height;
+            ctx.fillStyle = "rgba(0, 255, 0, 0.5)";
+            ctx.fillRect(sx, sy, 2, 2);
+            if (Math.random() > 0.9) {
+                ctx.fillText(Math.floor(Math.random() * 1000), sx + 5, sy);
+            }
+        }
 
-        conn.on('open', () => {
-            sysStatus.innerText = "TRANSMITTING DATA...";
-            document.getElementById('sig-strength').innerText = "100%";
-        });
+        requestAnimationFrame(detect);
     }
 
-    function animate() {
-        requestAnimationFrame(animate);
-        renderer.render(scene, camera);
+    async function main() {
+        model = await cocoSsd.load();
+        await setupCamera();
+        video.play();
+        detect();
     }
-    animate();
+
+    main();
 </script>
 </body>
 </html>
