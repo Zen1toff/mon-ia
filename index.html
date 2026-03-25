@@ -3,117 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Spy-Cam IA : Bio-Monitor</title>
+    <title>Game-Sense IA : Analyzer</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     
     <style>
-        body { margin: 0; background: #000; color: #ff3300; font-family: 'Courier New', monospace; overflow: hidden; }
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; border-left: 2px solid #ff3300; padding-left: 15px; background: rgba(0,0,0,0.5); }
+        body { margin: 0; background: #000; color: #00ffcc; font-family: 'Courier New', monospace; overflow: hidden; }
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; border-left: 2px solid #00ffcc; padding-left: 15px; background: rgba(0,0,0,0.7); }
         .mode-selector { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; z-index: 100; }
-        button { padding: 15px 25px; background: none; border: 1px solid #ff3300; color: #ff3300; cursor: pointer; text-transform: uppercase; font-weight: bold; }
-        button:hover { background: #ff3300; color: #000; }
-        #video-preview { position: absolute; bottom: 10px; right: 10px; width: 150px; border: 1px solid #ff3300; display: none; }
-        canvas { display: block; filter: saturate(1.5) contrast(1.2); }
+        button { padding: 15px 25px; background: none; border: 1px solid #00ffcc; color: #00ffcc; cursor: pointer; text-transform: uppercase; }
+        #video-preview { position: absolute; bottom: 10px; right: 10px; width: 180px; border: 1px solid #00ffcc; display: none; }
+        .stat-box { font-size: 20px; margin-top: 10px; color: #fff; text-shadow: 0 0 5px #00ffcc; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    [ SYSTEM: <span id="sys-status">OFFLINE</span> ]<br>
-    [ SIGNAL: <span id="sig-strength">0%</span> ]<br>
-    [ TARGET: <span id="target-id">UNKNOWN</span> ]
+    [ GAME_LINK: <span id="sys-status">OFFLINE</span> ]<br>
+    [ APM_ESTIMATE: <span id="apm">0</span> ]<br>
+    <div class="stat-box" id="action-label">SCANNING INPUTS...</div>
 </div>
 
 <video id="video-preview" autoplay playsinline muted></video>
 
 <div class="mode-selector" id="setup">
-    <button onclick="initPC()">ACTIVER STATION PC</button>
-    <button onclick="initMobile()">ACTIVER CAPTEUR MOBILE</button>
+    <button onclick="initPC()">DÉMARRER HUD PC</button>
+    <button onclick="initMobile()">DÉMARRER CAPTURE IPHONE</button>
 </div>
 
 <script>
-    const SESSION_ID = "spy-net-77"; // Identifiant de liaison
-    let peer, conn;
-    const sysStatus = document.getElementById('sys-status');
+    const SESSION_ID = "game-ia-pro-2024"; 
+    let peer, conn, lastPos = {x:0, y:0};
+    let movements = 0;
 
-    // --- LOGIQUE 3D (PC) ---
+    // --- LOGIQUE 3D HUD ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Création d'un "Squelette" de points
-    const pointsGroup = new THREE.Group();
-    const dots = [];
+    const group = new THREE.Group();
+    const points = [];
     for(let i=0; i<33; i++) {
-        const dot = new THREE.Mesh(
-            new THREE.SphereGeometry(0.08, 8, 8),
-            new THREE.MeshBasicMaterial({ color: 0xff3300 })
-        );
-        dots.push(dot);
-        pointsGroup.add(dot);
+        const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
+        points.push(p);
+        group.add(p);
     }
-    scene.add(pointsGroup);
-    camera.position.z = 3;
+    scene.add(group);
+    camera.position.z = 4;
 
-    function updateSkeleton(landmarks) {
-        landmarks.forEach((lm, i) => {
-            dots[i].position.set((lm.x - 0.5) * 4, (lm.y - 0.5) * -4, lm.z * 2);
+    function processGameData(data) {
+        data.forEach((lm, i) => {
+            points[i].position.set((lm.x - 0.5) * 5, (lm.y - 0.5) * -5, lm.z * 2);
         });
+
+        // Calcul de l'agitation (APM simulé par le mouvement des mains)
+        const hand = data[15]; // Poignet gauche
+        const dist = Math.sqrt(Math.pow(hand.x - lastPos.x, 2) + Math.pow(hand.y - lastPos.y, 2));
+        if(dist > 0.05) movements++;
+        lastPos = hand;
     }
 
-    // --- LOGIQUE RÉSEAU & IA ---
+    setInterval(() => {
+        document.getElementById('apm').innerText = movements * 10;
+        movements = 0;
+    }, 1000);
+
+    // --- CONNEXION ---
     function initPC() {
         document.getElementById('setup').style.display = 'none';
         peer = new Peer(SESSION_ID);
-        sysStatus.innerText = "WAITING FOR CAPTURE...";
-        
         peer.on('connection', (c) => {
             conn = c;
-            sysStatus.innerText = "LINK ESTABLISHED";
-            document.getElementById('target-id').innerText = "HUMAN_01";
-            conn.on('data', (data) => updateSkeleton(data));
+            document.getElementById('sys-status').innerText = "CONNECTED";
+            conn.on('data', (data) => processGameData(data));
         });
     }
 
     async function initMobile() {
         document.getElementById('setup').style.display = 'none';
         document.getElementById('video-preview').style.display = 'block';
-        sysStatus.innerText = "CONNECTING TO STATION...";
-
         peer = new Peer();
         conn = peer.connect(SESSION_ID);
 
-        // Configuration MediaPipe Pose
         const pose = new Pose({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
         });
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true });
-        pose.onResults((results) => {
-            if (results.poseLandmarks && conn.open) {
-                conn.send(results.poseLandmarks);
-            }
-        });
+        pose.setOptions({ modelComplexity: 0, smoothLandmarks: true }); // Complexity 0 pour ultra-vitesse
+        pose.onResults((res) => { if(res.poseLandmarks && conn.open) conn.send(res.poseLandmarks); });
 
-        const videoElement = document.getElementById('video-preview');
-        const cameraPipe = new Camera(videoElement, {
-            onFrame: async () => { await pose.send({image: videoElement}); },
-            width: 640, height: 480, facingMode: "environment"
+        const cam = new Camera(document.getElementById('video-preview'), {
+            onFrame: async () => { await pose.send({image: document.getElementById('video-preview')}); },
+            width: 480, height: 360, facingMode: "environment"
         });
-        cameraPipe.start();
-
-        conn.on('open', () => {
-            sysStatus.innerText = "TRANSMITTING DATA...";
-            document.getElementById('sig-strength').innerText = "100%";
-        });
+        cam.start();
     }
 
     function animate() {
         requestAnimationFrame(animate);
+        group.rotation.y += 0.01;
         renderer.render(scene, camera);
     }
     animate();
