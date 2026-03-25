@@ -3,75 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UAV PRECISION SCANNER v1.0 // DEPLOYED</title>
+    <title>IA QUANTUM SCANNER v7.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/deeplab"></script>
 
     <style>
-        :root { --wz-green: #00ff41; --danger: #ff0000; --bg: #000; }
-        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; text-transform: uppercase; cursor: crosshair; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: white; text-transform: uppercase; cursor: crosshair; }
+        #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(1.1) contrast(1.1); }
+        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.6; z-index: 10; } /* Masque de segmentation */
+        #ui-overlay { position: absolute; inset: 0; z-index: 20; pointer-events: none; border: 2px solid rgba(0,255,255,0.2); }
         
-        /* Loading Screen (Recon style) */
-        #loading-screen { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid var(--wz-green); color: var(--wz-green); text-align: center;}
-        .glitch { animation: glitch 0.8s infinite; color: var(--wz-green); }
-        @keyframes glitch { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        
-        /* UI et Vidéo */
-        #viewport { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(1.1) contrast(1.1); visibility: hidden; }
-        #overlay { position: absolute; inset: 0; z-index: 10; pointer-events: none; visibility: hidden; } /* Toile de détection */
-        
-        /* Blocs HUD (Warzone style) */
-        #bottom-panel { position: absolute; bottom: 20px; left: 20px; z-index: 100; background: rgba(0,20,0,0.8); padding: 10px; border: 1px solid var(--wz-green); font-size: 11px; letter-spacing: 1px; color: var(--wz-green); visibility: hidden;}
-        .dot { width: 8px; height: 8px; background: var(--wz-green); border-radius: 50%; display: inline-block; margin-right: 5px; animation: pulse 1s infinite; }
-        @keyframes pulse { 50% { opacity: 0.2; } }
+        /* Panneau de statut technique */
+        #status { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 10px; border-left: 3px solid #00ffff; font-size: 10px; letter-spacing: 1px; }
+        .loading { color: #ffcc00; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.2; } }
     </style>
 </head>
 <body>
 
-<div id="loading-screen">
-    <div style="font-size: 12px; opacity: 0.6; margin-bottom: 20px;">UAV_SYSTEM: LINKING...</div>
-    <h1 class="glitch">> INITIALIZING_RECON_CORE</h1>
-    <button onclick="main()" id="start-btn" style="margin-top: 30px; padding: 15px 40px; background: none; border: 2px solid var(--wz-green); color: var(--wz-green); font-family: monospace; cursor: pointer;">DEPLOY_RECON</button>
-</div>
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
 
-<video id="viewport" autoplay playsinline muted></video>
-<canvas id="overlay"></canvas>
-
-<div id="bottom-panel">
-    > <span class="dot"></span>ACTIVE<br>
-    SYSTEM_READY: SCANNING...<br>
-    OBJECT_DETECTION: <span style="color:#0f0">ON</span><br>
-    SURFACE_ANALYSIS: <span style="color:#0f0">ACTIVE</span>
+<div id="ui-overlay">
+    <div id="status">
+        [ SYSTEM: <span id="sys-state" class="loading">INITIALIZING_CORE...</span> ]<br>
+        [ MODEL: DEEPLAB_V3_HIGHT_RES ]<br>
+        [ STATUS: ANALYSING_SURFACES ]<br>
+        [ DATA_FEED: <span id="data-count">0</span> POINTS/SEC ]
+    </div>
 </div>
 
 <script>
-    const video = document.getElementById('viewport');
-    const canvas = document.getElementById('overlay');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const sysState = document.getElementById('sys-state');
+    const dataCount = document.getElementById('data-count');
     let model;
+    let pointData = 0;
 
-    // Simulation de détails techniques ultra-précis pour Warzone style
-    // J'utilise le nom de la classe pour générer des détails spécifiques
-    const detailedData = {
-        'car': ['TYPE: SEDAN', 'MODEL: FIAT 500', 'COLOR: WHITE', 'REG: FR-AA-123-BB'],
-        'truck': ['TYPE: RIGID', 'MODEL: RENAULT', 'TARE: 12T'],
-        'bicycle': ['TYPE: ROAD', 'STATUS: PARKED'],
-        'person': ['TYPE: ADULT', 'TEMP: 310K'],
-        'bottle': ['CONTENT: LIQUID', 'TYPE: GLASS'],
-        'default': ['TYPE: OBJECT', 'MAT: ANALYSING', 'DETAIL: SCANNING...']
+    // Simulation de détails et matières basées sur la classe d'objet
+    const materialData = {
+        'person': ['BIOMETRIC: OK', 'TEMP: 36.8°C', 'ID: SUBJECT_#882'],
+        'table': ['MAT: ORGANIC/WOOD', 'STRUCT: STABLE', 'SURFACE: SMOOTH'],
+        'chair': ['MAT: POLYMER/METAL', 'STRUCT: LOAD_BEARING'],
+        'bottle': ['MAT: GLASS/PLASTIC', 'CONTENT: LIQUID_POSSIBLE'],
+        'dining table': ['MAT: WOOD/LAMINATE', 'SURFACE: LARGE_AREA'],
+        'car': ['MAT: METAL/PAINT', 'STRUCT: MOBILE_UNIT'],
+        'mouchoir': ['MAT: CELLULOSE/PAPER', 'STRUCT: SOFT_LAYER'], // Ajout générique
+        'rouleau': ['MAT: CELLULOSE/PAPER', 'STRUCT: CYLINDRICAL'], // Ajout générique
+        'default': ['MAT: UNKNOWN', 'STRUCT: ANALYSING', 'DETAIL: SCANNING_RAW_DATA']
     };
 
-    // Configuration de la caméra de l'iPhone (Caméra arrière, HQ)
+    // Configuration de la caméra de l'iPhone (Caméra arrière, résolution modérée pour la vitesse)
     async function setupCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: 1280, height: 720 },
+                video: { facingMode: "environment", width: 640, height: 480 },
                 audio: false
             });
             video.srcObject = stream;
             return new Promise((resolve) => { video.onloadedmetadata = () => resolve(video); });
         } catch (e) {
-            alert("Erreur Caméra: Assure-toi d'autoriser l'accès.");
+            sysState.innerText = "CAMERA_ERROR: " + e.message;
+            sysState.classList.remove('loading');
+            sysState.style.color = 'red';
         }
     }
 
@@ -79,74 +75,95 @@
     async function predict() {
         if (!model) return;
         
-        // 1. Détection des objets
-        const predictions = await model.detect(video);
+        // 1. Obtenir la carte de segmentation
+        const prediction = await model.segment(video);
         
         // Ajuster la taille du canvas
         if (canvas.width !== video.videoWidth) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-        } else {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Nettoyer
         }
         
-        // 2. Dessiner les carrés tactiques (Néon) et les détails précises
-        predictions.forEach(p => {
-            const [x, y, width, height] = p.bbox;
-            const score = Math.round(p.score * 100);
-            
-            // Carré Tactique Néon (Épais et Fluo)
-            ctx.strokeStyle = "#00ff41";
-            ctx.lineWidth = 4;
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = "#00ff41";
-            ctx.strokeRect(x, y, width, height);
-            ctx.shadowBlur = 0; // Reset
-            
-            // Texte d'analyse (Gros et Néon)
-            ctx.fillStyle = "white";
-            ctx.font = "bold 20px Courier New";
-            ctx.fillText(`> ${p.class.toUpperCase()}`, x + 10, y + 25);
-            ctx.font = "bold 16px Courier New"; // Plus petit pour le score
-            ctx.fillText(`CONF: ${score}%`, x + 10, y + 45);
-            
-            // --- C'est ici que j'ajoute les détails ultra-précis ---
-            // On va chercher dans detailedData selon la classe (car, truck...)
-            // Sinon on prend le default
-            ctx.font = "9px Courier New"; // Très petit pour les détails
-            ctx.fillStyle = "rgba(255,255,255,0.7)";
-            const details = detailedData[p.class] || detailedData['default'];
-            
-            details.forEach((detail, dIndex) => {
-                ctx.fillText(detail, x + 10, y + 60 + (dIndex * 12));
+        // 2. Créer l'image de segmentation (zones colorées)
+        const segmentationImage = ctx.createImageData(prediction.width, prediction.height);
+        const uniqueClasses = new Set();
+        
+        for (let i = 0; i < prediction.legend.length; i++) {
+            const rgb = prediction.legend[i];
+            const indices = prediction.mask[i];
+            indices.forEach(index => {
+                segmentationImage.data[index * 4] = rgb[0];
+                segmentationImage.data[index * 4 + 1] = rgb[1];
+                segmentationImage.data[index * 4 + 2] = rgb[2];
+                segmentationImage.data[index * 4 + 3] = 180; // Opacité (Alpha)
+                
+                // Pour la détection de classes plus tard
+                if (index % prediction.width === 0 && index / prediction.width === 0) {
+                     // Optimisation: on ne regarde pas tout le masque
+                }
             });
-            ctx.font = "bold 20px Courier New"; // Reset pour le prochain objet
+            uniqueClasses.add(prediction.legend[i]); // Ajout pour le décompte générique
+        }
+        ctx.putImageData(segmentationImage, 0, 0);
+
+        // 3. Dessiner les Tags et Détails (Analyse simulée)
+        ctx.fillStyle = "white";
+        ctx.font = "bold 16px Courier New";
+        
+        const detectedClasses = Object.keys(prediction.legend);
+        pointData = detectedClasses.length * 10; // Simulation de points de données
+
+        detectedClasses.forEach((cls, index) => {
+            // Création de fausses coordonnées pour le style
+            const x = Math.random() * (canvas.width - 200) + 50;
+            const y = Math.random() * (canvas.height - 100) + 50;
+            
+            // Carré de point de focus
+            ctx.fillStyle = "cyan";
+            ctx.fillRect(x, y, 10, 10);
+            
+            // Texte principal
+            ctx.fillStyle = "white";
+            ctx.fillText(`> ${cls.toUpperCase()}`, x + 15, y + 10);
+            
+            // Sous-détails (Matières, Structure)
+            ctx.font = "9px Courier New";
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            const details = materialData[cls] || materialData['default'];
+            details.forEach((detail, dIndex) => {
+                ctx.fillText(detail, x + 15, y + 25 + (dIndex * 12));
+            });
+            ctx.font = "bold 16px Courier New"; // Reset
         });
+
+        // Mise à jour du compteur de données
+        dataCount.innerText = pointData + (Math.floor(Math.random()*100));
 
         requestAnimationFrame(predict);
     }
 
     async function main() {
-        document.getElementById('start-btn').style.display = 'none';
-        
         try {
-            // Utilisation du modèle coco-ssd, optimisé pour la détection sur mobile
-            model = await cocoSsd.load();
+            // Charger le modèle 'ade20k' (plus complet pour les scènes complexes et surfaces)
+            model = await deeplab.load({ base: 'ade20k' });
+            sysState.innerText = "ACTIVE - DEEPLAB_V3";
+            sysState.classList.remove('loading');
+            sysState.style.color = '#00ffff';
             
             await setupCamera();
             video.play();
-            
-            // Masquer le chargement et afficher l'IA
-            document.getElementById('loading-screen').style.display = 'none';
-            video.style.visibility = 'visible';
-            canvas.style.visibility = 'visible';
-            document.getElementById('bottom-panel').style.visibility = 'visible';
-            
             predict();
         } catch (e) {
-            alert(`Erreur de chargement: ${e.message}`);
+            sysState.innerText = "CORE_ERROR: " + e.message;
+            sysState.classList.remove('loading');
+            sysState.style.color = 'red';
         }
     }
+
+    // Lancer au clic (Nécessaire sur iPhone pour la caméra)
+    document.body.onclick = () => {
+        if(sysState.innerText === "INITIALIZING_CORE...") main();
+    };
 </script>
 </body>
 </html>
