@@ -2,111 +2,168 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>WARZONE_VISION_AI_v6</title>
-    <script src="https://player.twitch.tv/js/embed/v1.js"></script>
-    <style>
-        :root { --wz-orange: #ff6600; --wz-bg: #050505; }
-        body { margin: 0; background: var(--wz-bg); color: var(--wz-orange); font-family: 'Courier New', monospace; overflow: hidden; display: flex; height: 100vh; }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>IA QUANTUM SCANNER v7.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/deeplab"></script>
 
-        /* Interface Layout */
-        #ai-sidebar { width: 300px; border-right: 1px solid var(--wz-orange); padding: 20px; display: flex; flex-direction: column; background: rgba(10,5,0,0.9); }
-        #viewport { flex: 1; position: relative; overflow: hidden; }
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: white; text-transform: uppercase; cursor: crosshair; }
+        #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(1.1) contrast(1.1); }
+        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.6; z-index: 10; } /* Masque de segmentation */
+        #ui-overlay { position: absolute; inset: 0; z-index: 20; pointer-events: none; border: 2px solid rgba(0,255,255,0.2); }
         
-        /* Analyseurs Graphiques */
-        .analyser-box { border: 1px solid var(--wz-orange); padding: 10px; margin-bottom: 15px; position: relative; }
-        .bar-container { height: 10px; background: #222; margin-top: 10px; border: 1px solid #444; }
-        #activity-bar { height: 100%; width: 0%; background: var(--wz-orange); transition: 0.1s; box-shadow: 0 0 10px var(--wz-orange); }
-        
-        /* HUD Vidéo */
-        #overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; border: 1px solid rgba(255,102,0,0.2); }
-        #warning { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; font-weight: bold; color: white; background: rgba(255,0,0,0.8); padding: 20px; display: none; z-index: 100; border: 4px solid white; }
-        
-        /* Setup */
-        #setup { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        input { background: #111; border: 1px solid var(--wz-orange); color: var(--wz-orange); padding: 15px; width: 300px; text-align: center; font-size: 18px; margin-bottom: 20px; outline: none; }
-        button { background: var(--wz-orange); color: #000; border: none; padding: 15px 50px; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; }
+        /* Panneau de statut technique */
+        #status { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 10px; border-left: 3px solid #00ffff; font-size: 10px; letter-spacing: 1px; }
+        .loading { color: #ffcc00; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.2; } }
     </style>
 </head>
 <body>
 
-<div id="setup">
-    <h1 style="letter-spacing: 10px;">WARZONE_VISION_LINK</h1>
-    <input type="text" id="streamer" placeholder="CHANNEL_ID">
-    <button onclick="startAI()">INITIALIZE_SCAN</button>
-</div>
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
 
-<div id="ai-sidebar">
-    <div class="analyser-box">
-        <div style="font-size: 10px;">PIXEL_DYNAMICS_AI</div>
-        <div id="intensity-val" style="font-size: 24px; font-weight: bold;">0%</div>
-        <div class="bar-container"><div id="activity-bar"></div></div>
+<div id="ui-overlay">
+    <div id="status">
+        [ SYSTEM: <span id="sys-state" class="loading">INITIALIZING_CORE...</span> ]<br>
+        [ MODEL: DEEPLAB_V3_HIGHT_RES ]<br>
+        [ STATUS: ANALYSING_SURFACES ]<br>
+        [ DATA_FEED: <span id="data-count">0</span> POINTS/SEC ]
     </div>
-    
-    <div class="analyser-box">
-        <div style="font-size: 10px;">ACTION_LOG</div>
-        <div id="log" style="font-size: 11px; height: 150px; overflow: hidden; color: #888; margin-top: 5px;">> WAITING_FOR_DATA...</div>
-    </div>
-
-    <div style="margin-top: auto; font-size: 9px;">
-        ENGINE: VISION_CORE_v6<br>
-        STATUS: ANALYSING_PIXELS<br>
-        WARZONE_PROTOCOL: ACTIVE
-    </div>
-</div>
-
-<div id="viewport">
-    <div id="warning">! WARNING: CONTACT !</div>
-    <div id="overlay"></div>
-    <div id="player" style="width: 100%; height: 100%;"></div>
 </div>
 
 <script>
-    let player;
-    let actions = 0;
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const sysState = document.getElementById('sys-state');
+    const dataCount = document.getElementById('data-count');
+    let model;
+    let pointData = 0;
 
-    function startAI() {
-        const channel = document.getElementById('streamer').value;
-        if(!channel) return;
-        document.getElementById('setup').style.display = 'none';
+    // Simulation de détails et matières basées sur la classe d'objet
+    const materialData = {
+        'person': ['BIOMETRIC: OK', 'TEMP: 36.8°C', 'ID: SUBJECT_#882'],
+        'table': ['MAT: ORGANIC/WOOD', 'STRUCT: STABLE', 'SURFACE: SMOOTH'],
+        'chair': ['MAT: POLYMER/METAL', 'STRUCT: LOAD_BEARING'],
+        'bottle': ['MAT: GLASS/PLASTIC', 'CONTENT: LIQUID_POSSIBLE'],
+        'dining table': ['MAT: WOOD/LAMINATE', 'SURFACE: LARGE_AREA'],
+        'car': ['MAT: METAL/PAINT', 'STRUCT: MOBILE_UNIT'],
+        'mouchoir': ['MAT: CELLULOSE/PAPER', 'STRUCT: SOFT_LAYER'], // Ajout générique
+        'rouleau': ['MAT: CELLULOSE/PAPER', 'STRUCT: CYLINDRICAL'], // Ajout générique
+        'default': ['MAT: UNKNOWN', 'STRUCT: ANALYSING', 'DETAIL: SCANNING_RAW_DATA']
+    };
 
-        // 1. Initialiser Twitch Player
-        player = new Twitch.Player("player", {
-            channel: channel,
-            width: "100%",
-            height: "100%",
-            parent: ["localhost"]
+    // Configuration de la caméra de l'iPhone (Caméra arrière, résolution modérée pour la vitesse)
+    async function setupCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment", width: 640, height: 480 },
+                audio: false
+            });
+            video.srcObject = stream;
+            return new Promise((resolve) => { video.onloadedmetadata = () => resolve(video); });
+        } catch (e) {
+            sysState.innerText = "CAMERA_ERROR: " + e.message;
+            sysState.classList.remove('loading');
+            sysState.style.color = 'red';
+        }
+    }
+
+    // Fonction principale d'analyse
+    async function predict() {
+        if (!model) return;
+        
+        // 1. Obtenir la carte de segmentation
+        const prediction = await model.segment(video);
+        
+        // Ajuster la taille du canvas
+        if (canvas.width !== video.videoWidth) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        }
+        
+        // 2. Créer l'image de segmentation (zones colorées)
+        const segmentationImage = ctx.createImageData(prediction.width, prediction.height);
+        const uniqueClasses = new Set();
+        
+        for (let i = 0; i < prediction.legend.length; i++) {
+            const rgb = prediction.legend[i];
+            const indices = prediction.mask[i];
+            indices.forEach(index => {
+                segmentationImage.data[index * 4] = rgb[0];
+                segmentationImage.data[index * 4 + 1] = rgb[1];
+                segmentationImage.data[index * 4 + 2] = rgb[2];
+                segmentationImage.data[index * 4 + 3] = 180; // Opacité (Alpha)
+                
+                // Pour la détection de classes plus tard
+                if (index % prediction.width === 0 && index / prediction.width === 0) {
+                     // Optimisation: on ne regarde pas tout le masque
+                }
+            });
+            uniqueClasses.add(prediction.legend[i]); // Ajout pour le décompte générique
+        }
+        ctx.putImageData(segmentationImage, 0, 0);
+
+        // 3. Dessiner les Tags et Détails (Analyse simulée)
+        ctx.fillStyle = "white";
+        ctx.font = "bold 16px Courier New";
+        
+        const detectedClasses = Object.keys(prediction.legend);
+        pointData = detectedClasses.length * 10; // Simulation de points de données
+
+        detectedClasses.forEach((cls, index) => {
+            // Création de fausses coordonnées pour le style
+            const x = Math.random() * (canvas.width - 200) + 50;
+            const y = Math.random() * (canvas.height - 100) + 50;
+            
+            // Carré de point de focus
+            ctx.fillStyle = "cyan";
+            ctx.fillRect(x, y, 10, 10);
+            
+            // Texte principal
+            ctx.fillStyle = "white";
+            ctx.fillText(`> ${cls.toUpperCase()}`, x + 15, y + 10);
+            
+            // Sous-détails (Matières, Structure)
+            ctx.font = "9px Courier New";
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            const details = materialData[cls] || materialData['default'];
+            details.forEach((detail, dIndex) => {
+                ctx.fillText(detail, x + 15, y + 25 + (dIndex * 12));
+            });
+            ctx.font = "bold 16px Courier New"; // Reset
         });
 
-        // 2. IA de simulation d'analyse de gameplay
-        // On "écoute" les inputs clavier/souris pour simuler l'analyse d'image
-        window.addEventListener('mousemove', () => actions++);
-        window.addEventListener('keydown', () => actions += 5);
+        // Mise à jour du compteur de données
+        dataCount.innerText = pointData + (Math.floor(Math.random()*100));
 
-        setInterval(() => {
-            let power = Math.min(actions * 1.5, 100);
-            
-            // Mise à jour de la barre d'activité
-            document.getElementById('activity-bar').style.width = power + "%";
-            document.getElementById('intensity-val').innerText = Math.round(power) + "%";
-
-            const log = document.getElementById('log');
-            
-            if(power > 65) {
-                log.innerHTML = `> [${new Date().toLocaleTimeString()}] CRITICAL_ENGAGEMENT<br>` + log.innerHTML;
-                document.getElementById('warning').style.display = "block";
-                document.getElementById('overlay').style.boxShadow = "inset 0 0 50px rgba(255,0,0,0.5)";
-            } else if (power > 20) {
-                log.innerHTML = `> [${new Date().toLocaleTimeString()}] MOVEMENT_DETECTED<br>` + log.innerHTML;
-                document.getElementById('warning').style.display = "none";
-                document.getElementById('overlay').style.boxShadow = "none";
-            } else {
-                document.getElementById('warning').style.display = "none";
-                document.getElementById('overlay').style.boxShadow = "none";
-            }
-            
-            actions = 0;
-        }, 1000);
+        requestAnimationFrame(predict);
     }
+
+    async function main() {
+        try {
+            // Charger le modèle 'ade20k' (plus complet pour les scènes complexes et surfaces)
+            model = await deeplab.load({ base: 'ade20k' });
+            sysState.innerText = "ACTIVE - DEEPLAB_V3";
+            sysState.classList.remove('loading');
+            sysState.style.color = '#00ffff';
+            
+            await setupCamera();
+            video.play();
+            predict();
+        } catch (e) {
+            sysState.innerText = "CORE_ERROR: " + e.message;
+            sysState.classList.remove('loading');
+            sysState.style.color = 'red';
+        }
+    }
+
+    // Lancer au clic (Nécessaire sur iPhone pour la caméra)
+    document.body.onclick = () => {
+        if(sysState.innerText === "INITIALIZING_CORE...") main();
+    };
 </script>
 </body>
 </html>
