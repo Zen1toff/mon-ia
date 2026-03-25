@@ -3,105 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA QUANTUM SCANNER v7.2 // FIX</title>
+    <title>UAV SCANNER v1.0 // DEPLOYED</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/deeplab"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
     <style>
-        :root { --hacker-cyan: #00ffff; --hacker-bg: #000; }
-        body { margin: 0; background: var(--hacker-bg); overflow: hidden; font-family: 'Courier New', monospace; color: white; text-transform: uppercase; }
+        :root { --wz-green: #00ff41; --danger: #ff0000; --bg: #000; }
+        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; text-transform: uppercase; cursor: none; }
         
-        /* Loading Screen */
-        #loading-screen { position: fixed; inset: 0; background: var(--hacker-bg); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid var(--hacker-cyan); }
-        .glitch { animation: glitch 1s infinite; color: var(--hacker-cyan); text-align: center; padding: 20px; }
-        @keyframes glitch { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        /* Loading Screen (Recon style) */
+        #loading-screen { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid var(--wz-green); color: var(--wz-green); text-align: center;}
+        .glitch { animation: pulse 0.8s infinite; color: var(--wz-green); }
+        @keyframes pulse { 50% { opacity: 0.3; } }
         
-        /* UI */
-        #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; visibility: hidden; }
-        #canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; z-index: 10; pointer-events: none; }
-        #status { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 10px; border-left: 3px solid var(--hacker-cyan); font-size: 10px; z-index: 100; }
-        button { margin-top: 20px; padding: 15px 30px; background: none; border: 1px solid var(--hacker-cyan); color: var(--hacker-cyan); cursor: pointer; font-family: monospace; }
+        /* UI et Vidéo */
+        #viewport { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(1.1) contrast(1.1); visibility: hidden; }
+        #overlay { position: absolute; inset: 0; z-index: 10; pointer-events: none; visibility: hidden; } /* Toile de détection */
+        
+        /* Blocs HUD (Warzone style) */
+        #bottom-panel { position: absolute; bottom: 20px; left: 20px; z-index: 100; background: rgba(0,20,0,0.8); padding: 10px; border: 1px solid var(--wz-green); font-size: 11px; letter-spacing: 1px; color: var(--wz-green); visibility: hidden;}
+        .dot { width: 8px; height: 8px; background: var(--wz-green); border-radius: 50%; display: inline-block; margin-right: 5px; animation: pulse 1s infinite; }
     </style>
 </head>
 <body>
 
 <div id="loading-screen">
-    <div class="glitch" id="load-text">> SYSTEM_OFFLINE<br>READY_TO_DEPLOY</div>
-    <button onclick="main()" id="start-btn">DEPLOY_QUANTUM_CORE</button>
+    <div style="font-size: 12px; opacity: 0.6; margin-bottom: 20px;">UAV_SYSTEM: LINKING...</div>
+    <h1 class="glitch">> INITIALIZING_RECON_CORE</h1>
+    <button onclick="main()" id="start-btn" style="margin-top: 30px; padding: 15px 40px; background: none; border: 2px solid var(--wz-green); color: var(--wz-green); font-family: monospace; cursor: pointer; text-transform: uppercase;">DEPLOY_RECON</button>
 </div>
 
-<video id="video" autoplay playsinline muted></video>
-<canvas id="canvas"></canvas>
+<video id="viewport" autoplay playsinline muted></video>
+<canvas id="overlay"></canvas>
 
-<div id="status" style="visibility: hidden;">
-    [ SYSTEM: <span style="color:#0f0">ONLINE</span> ]<br>
-    [ MODEL: DEEPLAB_V3_MOBILE ]<br>
-    [ SCAN: <span id="data-count">0</span> OBJ_DETECTED ]
+<div id="bottom-panel">
+    > <span class="dot"></span>ACTIVE<br>
+    SYSTEM_READY: SCANNING...<br>
+    OBJECT_DETECTION: <span style="color:#0f0">ON</span><br>
+    SURFACE_ANALYSIS: <span style="color:#0f0">ACTIVE</span>
 </div>
 
 <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
+    const video = document.getElementById('viewport');
+    const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
     const loadText = document.getElementById('load-text');
     let model;
 
-    async function main() {
-        document.getElementById('start-btn').style.display = 'none';
-        loadText.innerHTML = "> LOADING_MODEL...<br>PLEASE_WAIT";
-        
+    // Configuration de la caméra de l'iPhone (Caméra arrière, HQ)
+    async function setupCamera() {
         try {
-            // Utilisation du modèle 'pascal' qui est plus stable sur mobile
-            model = await deeplab.load({ base: 'pascal', quantizationBytes: 2 });
-            
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment" },
+                video: { facingMode: "environment", width: 1280, height: 720 },
                 audio: false
             });
             video.srcObject = stream;
-            
-            video.onloadedmetadata = () => {
-                document.getElementById('loading-screen').style.display = 'none';
-                video.style.visibility = 'visible';
-                canvas.style.visibility = 'visible';
-                document.getElementById('status').style.visibility = 'visible';
-                predict();
-            };
+            return new Promise((resolve) => { video.onloadedmetadata = () => resolve(video); });
         } catch (e) {
-            loadText.innerHTML = `<span style="color:red">> ERROR: ${e.message}</span>`;
+            alert("Erreur Caméra: Assure-toi d'autoriser l'accès.");
         }
     }
 
+    // Fonction principale d'analyse
     async function predict() {
-        const prediction = await model.segment(video);
+        if (!model) return;
         
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // 1. Détection des objets
+        const predictions = await model.detect(video);
         
-        const imgData = ctx.createImageData(prediction.width, prediction.height);
-        for (let i = 0; i < prediction.legend.length; i++) {
-            const rgb = prediction.legend[i];
-            const mask = prediction.mask[i];
-            mask.forEach(idx => {
-                imgData.data[idx*4] = rgb[0];
-                imgData.data[idx*4+1] = rgb[1];
-                imgData.data[idx*4+2] = rgb[2];
-                imgData.data[idx*4+3] = 150;
-            });
+        // Ajuster la taille du canvas
+        if (canvas.width !== video.videoWidth) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        } else {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Nettoyer
         }
-        ctx.putImageData(imgData, 0, 0);
-
-        // Dessiner les noms des objets
-        ctx.fillStyle = "white";
-        ctx.font = "bold 20px Courier New";
-        Object.keys(prediction.legend).forEach((obj, i) => {
-            if(obj !== 'background') {
-                ctx.fillText(`> ${obj.toUpperCase()}`, 30, 50 + (i * 30));
-            }
+        
+        // 2. Dessiner les carrés tactiques (Néon)
+        predictions.forEach(p => {
+            const [x, y, width, height] = p.bbox;
+            const score = Math.round(p.score * 100);
+            
+            // Carré Tactique Néon (Épais et Fluo)
+            ctx.strokeStyle = "#00ff41";
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#00ff41";
+            ctx.strokeRect(x, y, width, height);
+            ctx.shadowBlur = 0; // Reset
+            
+            // Texte d'analyse (Gros et Néon)
+            ctx.fillStyle = "white";
+            ctx.font = "bold 20px Courier New";
+            ctx.fillText(`> ${p.class.toUpperCase()}`, x + 10, y + 25);
+            ctx.font = "bold 16px Courier New"; // Plus petit pour le score
+            ctx.fillText(`CONF: ${score}%`, x + 10, y + 45);
         });
 
-        document.getElementById('data-count').innerText = Object.keys(prediction.legend).length - 1;
         requestAnimationFrame(predict);
+    }
+
+    async function main() {
+        document.getElementById('start-btn').style.display = 'none';
+        
+        try {
+            // Utilisation du modèle coco-ssd, optimisé pour la détection sur mobile
+            model = await cocoSsd.load();
+            
+            await setupCamera();
+            video.play();
+            
+            // Masquer le chargement et afficher l'IA
+            document.getElementById('loading-screen').style.display = 'none';
+            video.style.visibility = 'visible';
+            canvas.style.visibility = 'visible';
+            document.getElementById('bottom-panel').style.visibility = 'visible';
+            
+            predict();
+        } catch (e) {
+            alert(`Erreur de chargement: ${e.message}`);
+        }
     }
 </script>
 </body>
