@@ -2,117 +2,106 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Stream-Dash : Dashboard Live</title>
+    <title>WARZONE_TACTICAL_HUD v4.0</title>
     <script src="https://player.twitch.tv/js/embed/v1.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/comfy.js@latest/dist/comfy.min.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            padding: 0; 
-            background: #0a0a0a; 
-            color: #efeff1; 
-            font-family: 'Inter', sans-serif; 
-            display: flex; 
-            height: 100vh; 
-            overflow: hidden; 
-        }
+        :root { --warzone-green: #00ff41; --danger: #ff0000; --bg-dark: #0a0c0a; }
+        body { margin: 0; background: var(--bg-dark); color: var(--warzone-green); font-family: 'Courier New', monospace; display: flex; height: 100vh; overflow: hidden; }
 
-        /* Panneau de configuration au milieu au début */
-        #setup {
-            position: fixed; inset: 0; background: #0a0a0a;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 1000;
-        }
-        input { 
-            padding: 12px; width: 300px; border-radius: 4px; border: 1px solid #9147ff;
-            background: #18181b; color: white; font-size: 16px; margin-bottom: 10px;
-        }
-        button { 
-            padding: 12px 24px; background: #9147ff; color: white; 
-            border: none; border-radius: 4px; cursor: pointer; font-weight: bold;
-        }
+        /* Zones principales */
+        #left-recon { width: 300px; border-right: 1px solid #1a331a; display: flex; flex-direction: column; padding: 15px; background: rgba(0,20,0,0.5); }
+        #center-stream { flex: 1; position: relative; border: 1px solid #1a331a; }
+        #right-comms { width: 340px; border-left: 1px solid #1a331a; background: #050705; display: flex; flex-direction: column; }
 
-        /* Layout du Dashboard */
-        #main-container { display: flex; width: 100%; height: 100%; visibility: hidden; }
+        /* Widgets Warzone Style */
+        .module { border: 1px solid #1a331a; padding: 12px; margin-bottom: 15px; position: relative; overflow: hidden; }
+        .module::before { content: ""; position: absolute; top: 0; left: 0; width: 5px; height: 100%; background: var(--warzone-green); }
+        .title { font-size: 11px; letter-spacing: 2px; margin-bottom: 8px; opacity: 0.7; }
+        .data { font-size: 22px; font-weight: bold; }
 
-        /* Zone Vidéo (Gameplay) */
-        #video-player { flex: 1; background: #000; }
+        /* Radar Simulation */
+        #radar { width: 100%; height: 150px; background: radial-gradient(circle, #1a331a 1px, transparent 1px); background-size: 20px 20px; border: 1px solid #1a331a; position: relative; }
+        #radar-line { position: absolute; width: 100%; height: 2px; background: rgba(0,255,65,0.3); top: 0; animation: scan 3s linear infinite; }
 
-        /* Zone Chat et Stats */
-        #sidebar { 
-            width: 340px; 
-            display: flex; 
-            flex-direction: column; 
-            background: #18181b; 
-            border-left: 1px solid #26262c;
-        }
+        /* Twitch Overlay */
+        #setup { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 5px solid var(--warzone-green); }
+        input { background: #000; border: 1px solid var(--warzone-green); color: var(--warzone-green); padding: 10px; width: 250px; text-align: center; }
+        button { background: var(--warzone-green); color: #000; border: none; padding: 10px 30px; margin-top: 15px; font-weight: bold; cursor: pointer; }
 
-        #stats-bar {
-            padding: 15px;
-            background: #1f1f23;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: bold;
-            border-bottom: 1px solid #26262c;
-        }
-
-        .status-dot { width: 10px; height: 10px; background: #eb0400; border-radius: 50%; display: inline-block; margin-right: 5px; }
-
-        #twitch-chat { flex: 1; border: none; }
+        @keyframes scan { from { top: 0; } to { top: 100%; } }
+        .alert-active { background: rgba(255,0,0,0.2) !important; color: white !important; animation: blink 0.5s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
 <div id="setup">
-    <h1 style="color: #9147ff;">STREAM-DASH</h1>
-    <input type="text" id="channel-name" placeholder="Nom de ta chaîne Twitch...">
-    <button onclick="launchDashboard()">LANCER LE DASHBOARD</button>
+    <h1>WARZONE_UAV_LINK</h1>
+    <input type="text" id="streamer-id" placeholder="CHANNEL_NAME_REQUIRED">
+    <button onclick="linkSystem()">DEPLOY_HUD</button>
 </div>
 
-<div id="main-container">
-    <div id="video-player"></div>
-
-    <div id="sidebar">
-        <div id="stats-bar">
-            <span><span class="status-dot"></span> LIVE</span>
-            <span id="viewer-count">0 VIEWERS</span>
-        </div>
-        <iframe id="twitch-chat" src="" height="100%" width="100%"></iframe>
+<div id="left-recon">
+    <div class="module">
+        <div class="title">COMBAT_INTENSITY</div>
+        <div class="data" id="combat-lvl">0%</div>
     </div>
+    <div class="module">
+        <div class="title">TARGETING_PRECISION</div>
+        <div class="data" id="precision">98.2%</div>
+    </div>
+    <div class="title">RECON_RADAR</div>
+    <div id="radar"><div id="radar-line"></div></div>
+    <div style="margin-top: auto; font-size: 10px; opacity: 0.5;">F.O.V : 103<br>PING : 24ms<br>INPUT : KB/MOUSE</div>
+</div>
+
+<div id="center-stream">
+    <div id="twitch-player" style="width:100%; height:100%;"></div>
+</div>
+
+<div id="right-comms">
+    <div style="padding: 15px; border-bottom: 1px solid #1a331a;">COMMS_FEED (TWITCH)</div>
+    <iframe id="chat-embed" width="100%" height="100%" frameborder="0"></iframe>
 </div>
 
 <script>
-    function launchDashboard() {
-        const channel = document.getElementById('channel-name').value.trim();
-        if (!channel) return alert("Veuillez entrer un nom de chaîne.");
+    let mouseMoves = 0;
 
-        // Afficher l'interface
+    function linkSystem() {
+        const channel = document.getElementById('streamer-id').value;
+        if(!channel) return;
         document.getElementById('setup').style.display = 'none';
-        document.getElementById('main-container').style.visibility = 'visible';
 
-        // 1. Charger le Lecteur Vidéo (Gameplay)
-        var options = {
-            width: "100%",
-            height: "100%",
-            channel: channel,
-            parent: [window.location.hostname || "localhost"]
-        };
-        var player = new Twitch.Player("video-player", options);
+        // Charger Stream Warzone
+        new Twitch.Player("twitch-player", { 
+            channel: channel, 
+            width: "100%", 
+            height: "100%", 
+            parent: ["localhost", "127.0.0.1"] 
+        });
 
-        // 2. Charger le Chat
-        // Note : Twitch demande parfois que le site soit en HTTPS pour le chat embed
-        document.getElementById('twitch-chat').src = `https://www.twitch.tv/embed/${channel}/chat?parent=${window.location.hostname || "localhost"}&darkpopout`;
+        // Charger Chat Comms
+        document.getElementById('chat-embed').src = `https://www.twitch.tv/embed/${channel}/chat?parent=localhost&parent=127.0.0.1&darkpopout`;
 
-        // 3. Mettre à jour les Viewers (Via l'API du player)
+        // Tracker de combat (Souris/Clavier)
+        window.addEventListener('mousemove', () => mouseMoves++);
+        window.addEventListener('keydown', () => mouseMoves += 10);
+
         setInterval(() => {
-            const stats = player.getStats();
-            // Note : player.getStats() ne donne pas toujours les viewers en direct sur l'embed simple 
-            // pour des raisons de confidentialité, mais il confirme si le live tourne bien.
-            // On affiche "ONLINE" si le player a chargé des données.
-            if(player.getChannel()) {
-                document.getElementById('viewer-count').innerText = "SESSION ACTIVE";
+            let intensity = Math.min(mouseMoves / 2, 100);
+            document.getElementById('combat-lvl').innerText = Math.round(intensity) + "%";
+            
+            // Si l'intensité est haute (combat), on change le look
+            if(intensity > 60) {
+                document.getElementById('left-recon').classList.add('alert-active');
+                document.getElementById('combat-lvl').style.color = "white";
+            } else {
+                document.getElementById('left-recon').classList.remove('alert-active');
+                document.getElementById('combat-lvl').style.color = "#00ff41";
             }
-        }, 5000);
+            mouseMoves = 0;
+        }, 1000);
     }
 </script>
 </body>
