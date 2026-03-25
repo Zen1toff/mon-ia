@@ -2,118 +2,34 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA ANALYSE COMPORTEMENTALE</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-
-    <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: #ff6600; }
-        #output_canvas { width: 100vw; height: 100vh; object-fit: cover; filter: brightness(1.2) contrast(1.1); }
-        .ui-panel { position: absolute; top: 10px; right: 10px; background: rgba(20, 0, 0, 0.8); border: 1px solid #ff3300; padding: 10px; font-size: 10px; z-index: 100; pointer-events: none;}
-        .loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; }
-    </style>
+    <title>Web Effects Pro - Montage IA</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 </head>
 <body>
 
-<div id="loader" class="loading">CHARGEMENT DU NOYAU IA...</div>
-<div class="ui-panel" id="ui-data">
-    ANALYSE COMPORTEMENTALE : ON<br>
-    SCANNER BIOMÉTRIQUE : VEILLE<br>
-    DÉTECTION DE TEXTURE : ACTIVÉE
+<div class="app-container">
+    <aside class="toolbar">
+        <button onclick="applyEffect('sepia')">Sépia</button>
+        <button onclick="applyEffect('invert')">Inverser</button>
+        <button onclick="applyEffect('matrix')">Mode Matrix</button>
+        <div class="divider"></div>
+        <input type="file" id="uploader" accept="video/*">
+    </aside>
+
+    <main class="preview-area">
+        <div class="monitor">
+            <video id="player" controls></video>
+            <canvas id="effect-overlay"></canvas>
+        </div>
+        
+        <div class="timeline">
+            <div class="playhead"></div>
+            <div class="track">Piste Vidéo 1</div>
+        </div>
+    </main>
 </div>
 
-<video id="input_video" style="display:none;"></video>
-<canvas id="output_canvas"></canvas>
-
-<script type="module">
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const loader = document.getElementById('loader');
-    const uiData = document.getElementById('ui-data');
-
-    function onResults(results) {
-        loader.style.display = 'none';
-        canvasElement.width = videoElement.videoWidth;
-        canvasElement.height = videoElement.videoHeight;
-
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        
-        // 1. Image caméra en fond
-        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-        // 2. Filtre de "Vision Thermique/Orange"
-        canvasCtx.fillStyle = "rgba(255, 100, 0, 0.1)";
-        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-
-        if (results.poseLandmarks) {
-            // Dessiner le squelette (comportement)
-            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
-                          {color: '#ff3300', lineWidth: 2});
-            drawLandmarks(canvasCtx, results.poseLandmarks,
-                         {color: '#ffffff', lineWidth: 1, radius: 2});
-
-            // Analyse de l'action (Exemple: bras levé)
-            const leftShoulder = results.poseLandmarks[11];
-            const leftWrist = results.poseLandmarks[15];
-            if(leftWrist.y < leftShoulder.y) {
-                uiData.innerHTML = "ACTION : MOUVEMENT DÉTECTÉ<br>OBJET EN MAIN : PROBABLE<br>STRESS : BAS";
-            } else {
-                uiData.innerHTML = "ACTION : REPOS / OBSERVATION<br>SCAN SURFACES : OK<br>ID_PERSON : #8829";
-            }
-
-            // Ajouter des chiffres "data" sur chaque articulation
-            results.poseLandmarks.forEach((lm, i) => {
-                if(i % 5 === 0) { // On ne sature pas trop l'écran
-                    canvasCtx.fillStyle = "white";
-                    canvasCtx.font = "8px monospace";
-                    canvasCtx.fillText(`V_${Math.round(lm.z * -1000)}`, lm.x * canvasElement.width + 10, lm.y * canvasElement.height);
-                }
-            });
-        }
-
-        // 3. Simulation d'analyse de texture (Points de surface pour bois/papier)
-        for (let i = 0; i < 40; i++) {
-            const rx = Math.random() * canvasElement.width;
-            const ry = Math.random() * canvasElement.height;
-            canvasCtx.fillStyle = "rgba(255, 255, 255, 0.4)";
-            canvasCtx.fillRect(rx, ry, 1, 1);
-            if(Math.random() > 0.98) {
-                canvasCtx.fillStyle = "#ff6600";
-                canvasCtx.fillText("SURFACE_MAT:" + (Math.random() > 0.5 ? "ORGANIC" : "SYNTHETIC"), rx, ry);
-            }
-        }
-
-        canvasCtx.restore();
-    }
-
-    const pose = new Pose({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    });
-
-    pose.setOptions({
-        modelComplexity: 1, // 1 pour la fluidité sur iPhone, 2 pour la précision extrême
-        smoothLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-    });
-
-    pose.onResults(onResults);
-
-    const camera = new Camera(videoElement, {
-        onFrame: async () => {
-            await pose.send({image: videoElement});
-        },
-        width: 640,
-        height: 480,
-        facingMode: "environment"
-    });
-    
-    // Démarrage au clic pour iPhone
-    document.body.onclick = () => camera.start();
-</script>
+<script src="script.js"></script>
 </body>
 </html>
