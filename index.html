@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UAV SCANNER v1.0 // DEPLOYED</title>
+    <title>UAV PRECISION SCANNER v1.0 // DEPLOYED</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
     <style>
         :root { --wz-green: #00ff41; --danger: #ff0000; --bg: #000; }
-        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; text-transform: uppercase; cursor: none; }
+        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; text-transform: uppercase; cursor: crosshair; }
         
         /* Loading Screen (Recon style) */
         #loading-screen { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid var(--wz-green); color: var(--wz-green); text-align: center;}
-        .glitch { animation: pulse 0.8s infinite; color: var(--wz-green); }
-        @keyframes pulse { 50% { opacity: 0.3; } }
+        .glitch { animation: glitch 0.8s infinite; color: var(--wz-green); }
+        @keyframes glitch { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         
         /* UI et Vidéo */
         #viewport { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(1.1) contrast(1.1); visibility: hidden; }
@@ -23,6 +23,7 @@
         /* Blocs HUD (Warzone style) */
         #bottom-panel { position: absolute; bottom: 20px; left: 20px; z-index: 100; background: rgba(0,20,0,0.8); padding: 10px; border: 1px solid var(--wz-green); font-size: 11px; letter-spacing: 1px; color: var(--wz-green); visibility: hidden;}
         .dot { width: 8px; height: 8px; background: var(--wz-green); border-radius: 50%; display: inline-block; margin-right: 5px; animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.2; } }
     </style>
 </head>
 <body>
@@ -30,7 +31,7 @@
 <div id="loading-screen">
     <div style="font-size: 12px; opacity: 0.6; margin-bottom: 20px;">UAV_SYSTEM: LINKING...</div>
     <h1 class="glitch">> INITIALIZING_RECON_CORE</h1>
-    <button onclick="main()" id="start-btn" style="margin-top: 30px; padding: 15px 40px; background: none; border: 2px solid var(--wz-green); color: var(--wz-green); font-family: monospace; cursor: pointer; text-transform: uppercase;">DEPLOY_RECON</button>
+    <button onclick="main()" id="start-btn" style="margin-top: 30px; padding: 15px 40px; background: none; border: 2px solid var(--wz-green); color: var(--wz-green); font-family: monospace; cursor: pointer;">DEPLOY_RECON</button>
 </div>
 
 <video id="viewport" autoplay playsinline muted></video>
@@ -47,8 +48,18 @@
     const video = document.getElementById('viewport');
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
-    const loadText = document.getElementById('load-text');
     let model;
+
+    // Simulation de détails techniques ultra-précis pour Warzone style
+    // J'utilise le nom de la classe pour générer des détails spécifiques
+    const detailedData = {
+        'car': ['TYPE: SEDAN', 'MODEL: FIAT 500', 'COLOR: WHITE', 'REG: FR-AA-123-BB'],
+        'truck': ['TYPE: RIGID', 'MODEL: RENAULT', 'TARE: 12T'],
+        'bicycle': ['TYPE: ROAD', 'STATUS: PARKED'],
+        'person': ['TYPE: ADULT', 'TEMP: 310K'],
+        'bottle': ['CONTENT: LIQUID', 'TYPE: GLASS'],
+        'default': ['TYPE: OBJECT', 'MAT: ANALYSING', 'DETAIL: SCANNING...']
+    };
 
     // Configuration de la caméra de l'iPhone (Caméra arrière, HQ)
     async function setupCamera() {
@@ -79,7 +90,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height); // Nettoyer
         }
         
-        // 2. Dessiner les carrés tactiques (Néon)
+        // 2. Dessiner les carrés tactiques (Néon) et les détails précises
         predictions.forEach(p => {
             const [x, y, width, height] = p.bbox;
             const score = Math.round(p.score * 100);
@@ -98,6 +109,18 @@
             ctx.fillText(`> ${p.class.toUpperCase()}`, x + 10, y + 25);
             ctx.font = "bold 16px Courier New"; // Plus petit pour le score
             ctx.fillText(`CONF: ${score}%`, x + 10, y + 45);
+            
+            // --- C'est ici que j'ajoute les détails ultra-précis ---
+            // On va chercher dans detailedData selon la classe (car, truck...)
+            // Sinon on prend le default
+            ctx.font = "9px Courier New"; // Très petit pour les détails
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            const details = detailedData[p.class] || detailedData['default'];
+            
+            details.forEach((detail, dIndex) => {
+                ctx.fillText(detail, x + 10, y + 60 + (dIndex * 12));
+            });
+            ctx.font = "bold 20px Courier New"; // Reset pour le prochain objet
         });
 
         requestAnimationFrame(predict);
