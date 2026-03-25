@@ -2,78 +2,99 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>WARZONE_TACTICAL_HUD v4.0</title>
+    <title>WARZONE AI-RECON DASHBOARD v5.0</title>
     <script src="https://player.twitch.tv/js/embed/v1.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/comfy.js@latest/dist/comfy.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    
     <style>
-        :root { --warzone-green: #00ff41; --danger: #ff0000; --bg-dark: #0a0c0a; }
-        body { margin: 0; background: var(--bg-dark); color: var(--warzone-green); font-family: 'Courier New', monospace; display: flex; height: 100vh; overflow: hidden; }
+        :root { --wz-green: #00ff41; --wz-bg: #050705; --wz-panel: #0a0c0a; --danger: #ff0000; }
+        body { margin: 0; background: var(--wz-bg); color: var(--wz-green); font-family: 'Courier New', monospace; display: flex; height: 100vh; overflow: hidden; }
 
         /* Zones principales */
-        #left-recon { width: 300px; border-right: 1px solid #1a331a; display: flex; flex-direction: column; padding: 15px; background: rgba(0,20,0,0.5); }
-        #center-stream { flex: 1; position: relative; border: 1px solid #1a331a; }
-        #right-comms { width: 340px; border-left: 1px solid #1a331a; background: #050705; display: flex; flex-direction: column; }
+        #tactical-recon { width: 320px; border-right: 1px solid #1a331a; display: flex; flex-direction: column; padding: 20px; background: rgba(0,20,0,0.6); }
+        #stream-core { flex: 1; position: relative; border: 1px solid #1a331a; }
+        #comms-feed { width: 340px; border-left: 1px solid #1a331a; background: #050705; display: flex; flex-direction: column; }
 
-        /* Widgets Warzone Style */
-        .module { border: 1px solid #1a331a; padding: 12px; margin-bottom: 15px; position: relative; overflow: hidden; }
-        .module::before { content: ""; position: absolute; top: 0; left: 0; width: 5px; height: 100%; background: var(--warzone-green); }
-        .title { font-size: 11px; letter-spacing: 2px; margin-bottom: 8px; opacity: 0.7; }
-        .data { font-size: 22px; font-weight: bold; }
+        /* Widgets Warzone HUD */
+        .module { border: 1px solid #1a331a; padding: 15px; margin-bottom: 20px; position: relative; }
+        .module::before { content: ""; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--wz-green); }
+        .title { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.7; margin-bottom: 10px; }
+        .data-stream { font-size: 28px; font-weight: bold; font-family: sans-serif; }
+        
+        /* Barres de progression */
+        .bar-bg { height: 6px; background: #1a331a; margin-top: 10px; position: relative; }
+        .bar-fill { height: 100%; background: var(--wz-green); width: 0%; transition: width 0.3s, background 0.3s; }
 
-        /* Radar Simulation */
-        #radar { width: 100%; height: 150px; background: radial-gradient(circle, #1a331a 1px, transparent 1px); background-size: 20px 20px; border: 1px solid #1a331a; position: relative; }
-        #radar-line { position: absolute; width: 100%; height: 2px; background: rgba(0,255,65,0.3); top: 0; animation: scan 3s linear infinite; }
+        /* Overlay IA sur le Stream */
+        #ai-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; border: 2px solid transparent; transition: 0.2s; }
+        .ai-label { position: absolute; background: rgba(0,255,65,0.2); border: 1px solid var(--wz-green); padding: 2px 6px; font-size: 10px; color: white; display: none;}
+        #plates-target { bottom: 120px; left: 150px; } /* Position approximative du HUD Warzone */
+        #ammo-target { bottom: 60px; right: 180px; } /* Position approximative du HUD Warzone */
 
-        /* Twitch Overlay */
-        #setup { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 5px solid var(--warzone-green); }
-        input { background: #000; border: 1px solid var(--warzone-green); color: var(--warzone-green); padding: 10px; width: 250px; text-align: center; }
-        button { background: var(--warzone-green); color: #000; border: none; padding: 10px 30px; margin-top: 15px; font-weight: bold; cursor: pointer; }
-
-        @keyframes scan { from { top: 0; } to { top: 100%; } }
-        .alert-active { background: rgba(255,0,0,0.2) !important; color: white !important; animation: blink 0.5s infinite; }
+        /* Alertes */
+        .alert-box { position: absolute; top: 20px; right: 20px; background: rgba(255,0,0,0.9); color: white; padding: 8px 15px; font-size: 14px; font-weight: bold; display: none; animation: blink 0.5s infinite; }
         @keyframes blink { 50% { opacity: 0.5; } }
+        
+        /* Setup */
+        #setup { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid var(--wz-green); }
+        input { background: #000; border: 1px solid var(--wz-green); color: var(--wz-green); padding: 12px; width: 280px; text-align: center; font-size: 16px; outline: none; }
+        button { background: var(--wz-green); color: #000; border: none; padding: 12px 40px; margin-top: 20px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
 <div id="setup">
-    <h1>WARZONE_UAV_LINK</h1>
-    <input type="text" id="streamer-id" placeholder="CHANNEL_NAME_REQUIRED">
-    <button onclick="linkSystem()">DEPLOY_HUD</button>
+    <h1 style="letter-spacing: 5px;">WARZONE_AI_RECON</h1>
+    <input type="text" id="streamer-id" placeholder="ENTER_TWITCH_CHANNEL">
+    <button onclick="deployTacticalHUD()">DEPLOY_SYSTEM</button>
 </div>
 
-<div id="left-recon">
+<div id="tactical-recon">
     <div class="module">
-        <div class="title">COMBAT_INTENSITY</div>
-        <div class="data" id="combat-lvl">0%</div>
+        <div class="title">Combat_Intensity</div>
+        <div class="data-stream" id="combat-val">0%</div>
+        <div class="bar-bg"><div class="bar-fill" id="combat-bar"></div></div>
     </div>
     <div class="module">
-        <div class="title">TARGETING_PRECISION</div>
-        <div class="data" id="precision">98.2%</div>
+        <div class="title">Input_Stress</div>
+        <div class="data-stream" id="stress-val">LOW</div>
     </div>
-    <div class="title">RECON_RADAR</div>
-    <div id="radar"><div id="radar-line"></div></div>
-    <div style="margin-top: auto; font-size: 10px; opacity: 0.5;">F.O.V : 103<br>PING : 24ms<br>INPUT : KB/MOUSE</div>
+    <div class="module">
+        <div class="title">System_Latency</div>
+        <div class="data-stream" id="ping-val">24ms</div>
+    </div>
+    <div style="margin-top: auto; font-size: 10px; opacity: 0.5;">
+        AI_ENGINE: v5.0<br>
+        STATUS: ONLINE<br>
+        F.O.V : 103 | INPUT: KB/M
+    </div>
 </div>
 
-<div id="center-stream">
+<div id="stream-core">
+    <div id="ai-overlay">
+        <div class="alert-box" id="high-alert">CRITICAL_ENGAGEMENT</div>
+        <div class="ai-label" id="plates-target">AI_ANALYSIS: PLATES_DETECTED</div>
+        <div class="ai-label" id="ammo-target">AI_ANALYSIS: AMMO_COUNT_ACTIVE</div>
+    </div>
     <div id="twitch-player" style="width:100%; height:100%;"></div>
 </div>
 
-<div id="right-comms">
-    <div style="padding: 15px; border-bottom: 1px solid #1a331a;">COMMS_FEED (TWITCH)</div>
+<div id="comms-feed">
+    <div style="padding: 15px; border-bottom: 1px solid #1a331a; background: #0a110a;">COMMS_FEED (TWITCH)</div>
     <iframe id="chat-embed" width="100%" height="100%" frameborder="0"></iframe>
 </div>
 
 <script>
     let mouseMoves = 0;
+    let intensity = 0;
 
-    function linkSystem() {
-        const channel = document.getElementById('streamer-id').value;
+    function deployTacticalHUD() {
+        const channel = document.getElementById('streamer-id').value.trim();
         if(!channel) return;
         document.getElementById('setup').style.display = 'none';
 
-        // Charger Stream Warzone
+        // 1. Charger Stream Warzone
         new Twitch.Player("twitch-player", { 
             channel: channel, 
             width: "100%", 
@@ -81,24 +102,48 @@
             parent: ["localhost", "127.0.0.1"] 
         });
 
-        // Charger Chat Comms
+        // 2. Charger Chat Comms
         document.getElementById('chat-embed').src = `https://www.twitch.tv/embed/${channel}/chat?parent=localhost&parent=127.0.0.1&darkpopout`;
 
-        // Tracker de combat (Souris/Clavier)
+        // 3. IA de Télémétrie (Analyse de Inputs)
         window.addEventListener('mousemove', () => mouseMoves++);
         window.addEventListener('keydown', () => mouseMoves += 10);
 
+        // Moteur d'analyse IA (toutes les secondes)
         setInterval(() => {
-            let intensity = Math.min(mouseMoves / 2, 100);
-            document.getElementById('combat-lvl').innerText = Math.round(intensity) + "%";
+            intensity = Math.min(mouseMoves / 2.5, 100);
             
-            // Si l'intensité est haute (combat), on change le look
+            // Mise à jour de l'interface
+            document.getElementById('combat-val').innerText = Math.round(intensity) + "%";
+            document.getElementById('combat-bar').style.width = intensity + "%";
+            
+            // Analyse de Stress
+            let stress = intensity > 70 ? "CRITICAL" : (intensity > 40 ? "MEDIUM" : "LOW");
+            document.getElementById('stress-val').innerText = stress;
+
+            // Mode Combat (Alerte Rouge)
             if(intensity > 60) {
-                document.getElementById('left-recon').classList.add('alert-active');
-                document.getElementById('combat-lvl').style.color = "white";
+                document.getElementById('tactical-recon').style.background = "rgba(100,0,0,0.5)";
+                document.getElementById('combat-bar').style.background = "red";
+                document.getElementById('combat-val').style.color = "red";
+                document.getElementById('stress-val').style.color = "red";
+                document.getElementById('high-alert').style.display = "block";
+                document.getElementById('ai-overlay').style.borderColor = "rgba(255,0,0,0.4)";
+                
+                // Active les zones d'analyse simulées (OCR)
+                document.getElementById('plates-target').style.display = "block";
+                document.getElementById('ammo-target').style.display = "block";
             } else {
-                document.getElementById('left-recon').classList.remove('alert-active');
-                document.getElementById('combat-lvl').style.color = "#00ff41";
+                document.getElementById('tactical-recon').style.background = "rgba(0,20,0,0.6)";
+                document.getElementById('combat-bar').style.background = "#00ff41";
+                document.getElementById('combat-val').style.color = "#00ff41";
+                document.getElementById('stress-val').style.color = "#00ff41";
+                document.getElementById('high-alert').style.display = "none";
+                document.getElementById('ai-overlay').style.borderColor = "transparent";
+                
+                // Cache les zones d'analyse
+                document.getElementById('plates-target').style.display = "none";
+                document.getElementById('ammo-target').style.display = "none";
             }
             mouseMoves = 0;
         }, 1000);
