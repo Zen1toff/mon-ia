@@ -2,112 +2,118 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Game-Sense IA : Analyzer</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    
+    <title>Stream-Dash : Dashboard Live</title>
+    <script src="https://player.twitch.tv/js/embed/v1.js"></script>
     <style>
-        body { margin: 0; background: #000; color: #00ffcc; font-family: 'Courier New', monospace; overflow: hidden; }
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; border-left: 2px solid #00ffcc; padding-left: 15px; background: rgba(0,0,0,0.7); }
-        .mode-selector { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; z-index: 100; }
-        button { padding: 15px 25px; background: none; border: 1px solid #00ffcc; color: #00ffcc; cursor: pointer; text-transform: uppercase; }
-        #video-preview { position: absolute; bottom: 10px; right: 10px; width: 180px; border: 1px solid #00ffcc; display: none; }
-        .stat-box { font-size: 20px; margin-top: 10px; color: #fff; text-shadow: 0 0 5px #00ffcc; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background: #0a0a0a; 
+            color: #efeff1; 
+            font-family: 'Inter', sans-serif; 
+            display: flex; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+
+        /* Panneau de configuration au milieu au début */
+        #setup {
+            position: fixed; inset: 0; background: #0a0a0a;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        input { 
+            padding: 12px; width: 300px; border-radius: 4px; border: 1px solid #9147ff;
+            background: #18181b; color: white; font-size: 16px; margin-bottom: 10px;
+        }
+        button { 
+            padding: 12px 24px; background: #9147ff; color: white; 
+            border: none; border-radius: 4px; cursor: pointer; font-weight: bold;
+        }
+
+        /* Layout du Dashboard */
+        #main-container { display: flex; width: 100%; height: 100%; visibility: hidden; }
+
+        /* Zone Vidéo (Gameplay) */
+        #video-player { flex: 1; background: #000; }
+
+        /* Zone Chat et Stats */
+        #sidebar { 
+            width: 340px; 
+            display: flex; 
+            flex-direction: column; 
+            background: #18181b; 
+            border-left: 1px solid #26262c;
+        }
+
+        #stats-bar {
+            padding: 15px;
+            background: #1f1f23;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            border-bottom: 1px solid #26262c;
+        }
+
+        .status-dot { width: 10px; height: 10px; background: #eb0400; border-radius: 50%; display: inline-block; margin-right: 5px; }
+
+        #twitch-chat { flex: 1; border: none; }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    [ GAME_LINK: <span id="sys-status">OFFLINE</span> ]<br>
-    [ APM_ESTIMATE: <span id="apm">0</span> ]<br>
-    <div class="stat-box" id="action-label">SCANNING INPUTS...</div>
+<div id="setup">
+    <h1 style="color: #9147ff;">STREAM-DASH</h1>
+    <input type="text" id="channel-name" placeholder="Nom de ta chaîne Twitch...">
+    <button onclick="launchDashboard()">LANCER LE DASHBOARD</button>
 </div>
 
-<video id="video-preview" autoplay playsinline muted></video>
+<div id="main-container">
+    <div id="video-player"></div>
 
-<div class="mode-selector" id="setup">
-    <button onclick="initPC()">DÉMARRER HUD PC</button>
-    <button onclick="initMobile()">DÉMARRER CAPTURE IPHONE</button>
+    <div id="sidebar">
+        <div id="stats-bar">
+            <span><span class="status-dot"></span> LIVE</span>
+            <span id="viewer-count">0 VIEWERS</span>
+        </div>
+        <iframe id="twitch-chat" src="" height="100%" width="100%"></iframe>
+    </div>
 </div>
 
 <script>
-    const SESSION_ID = "game-ia-pro-2024"; 
-    let peer, conn, lastPos = {x:0, y:0};
-    let movements = 0;
+    function launchDashboard() {
+        const channel = document.getElementById('channel-name').value.trim();
+        if (!channel) return alert("Veuillez entrer un nom de chaîne.");
 
-    // --- LOGIQUE 3D HUD ---
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    const group = new THREE.Group();
-    const points = [];
-    for(let i=0; i<33; i++) {
-        const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
-        points.push(p);
-        group.add(p);
-    }
-    scene.add(group);
-    camera.position.z = 4;
-
-    function processGameData(data) {
-        data.forEach((lm, i) => {
-            points[i].position.set((lm.x - 0.5) * 5, (lm.y - 0.5) * -5, lm.z * 2);
-        });
-
-        // Calcul de l'agitation (APM simulé par le mouvement des mains)
-        const hand = data[15]; // Poignet gauche
-        const dist = Math.sqrt(Math.pow(hand.x - lastPos.x, 2) + Math.pow(hand.y - lastPos.y, 2));
-        if(dist > 0.05) movements++;
-        lastPos = hand;
-    }
-
-    setInterval(() => {
-        document.getElementById('apm').innerText = movements * 10;
-        movements = 0;
-    }, 1000);
-
-    // --- CONNEXION ---
-    function initPC() {
+        // Afficher l'interface
         document.getElementById('setup').style.display = 'none';
-        peer = new Peer(SESSION_ID);
-        peer.on('connection', (c) => {
-            conn = c;
-            document.getElementById('sys-status').innerText = "CONNECTED";
-            conn.on('data', (data) => processGameData(data));
-        });
+        document.getElementById('main-container').style.visibility = 'visible';
+
+        // 1. Charger le Lecteur Vidéo (Gameplay)
+        var options = {
+            width: "100%",
+            height: "100%",
+            channel: channel,
+            parent: [window.location.hostname || "localhost"]
+        };
+        var player = new Twitch.Player("video-player", options);
+
+        // 2. Charger le Chat
+        // Note : Twitch demande parfois que le site soit en HTTPS pour le chat embed
+        document.getElementById('twitch-chat').src = `https://www.twitch.tv/embed/${channel}/chat?parent=${window.location.hostname || "localhost"}&darkpopout`;
+
+        // 3. Mettre à jour les Viewers (Via l'API du player)
+        setInterval(() => {
+            const stats = player.getStats();
+            // Note : player.getStats() ne donne pas toujours les viewers en direct sur l'embed simple 
+            // pour des raisons de confidentialité, mais il confirme si le live tourne bien.
+            // On affiche "ONLINE" si le player a chargé des données.
+            if(player.getChannel()) {
+                document.getElementById('viewer-count').innerText = "SESSION ACTIVE";
+            }
+        }, 5000);
     }
-
-    async function initMobile() {
-        document.getElementById('setup').style.display = 'none';
-        document.getElementById('video-preview').style.display = 'block';
-        peer = new Peer();
-        conn = peer.connect(SESSION_ID);
-
-        const pose = new Pose({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-        });
-        pose.setOptions({ modelComplexity: 0, smoothLandmarks: true }); // Complexity 0 pour ultra-vitesse
-        pose.onResults((res) => { if(res.poseLandmarks && conn.open) conn.send(res.poseLandmarks); });
-
-        const cam = new Camera(document.getElementById('video-preview'), {
-            onFrame: async () => { await pose.send({image: document.getElementById('video-preview')}); },
-            width: 480, height: 360, facingMode: "environment"
-        });
-        cam.start();
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        group.rotation.y += 0.01;
-        renderer.render(scene, camera);
-    }
-    animate();
 </script>
 </body>
 </html>
