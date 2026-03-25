@@ -3,179 +3,158 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Slither Mobile</title>
+    <title>Mini Blox 3D</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background: #111; 
-            font-family: sans-serif; 
-            touch-action: none; /* Empêche le zoom/scroll accidentel */
-        }
+        body { margin: 0; overflow: hidden; background: #87CEEB; touch-action: none; font-family: sans-serif; }
         canvas { display: block; }
-        #ui {
-            position: absolute; top: 10px; left: 10px; color: white;
-            pointer-events: none; z-index: 10;
+        
+        /* UI - Joystick */
+        #joystick-container {
+            position: absolute; bottom: 40px; left: 40px;
+            width: 120px; height: 120px; background: rgba(255,255,255,0.2);
+            border-radius: 50%; touch-action: none;
+        }
+        #joystick-knob {
+            position: absolute; top: 35px; left: 35px;
+            width: 50px; height: 50px; background: white;
+            border-radius: 50%; opacity: 0.8;
+        }
+
+        /* UI - Bouton Sauter */
+        #jump-btn {
+            position: absolute; bottom: 60px; right: 40px;
+            width: 70px; height: 70px; background: rgba(255,255,255,0.5);
+            border: 4px solid white; border-radius: 50%;
+            color: white; font-weight: bold; display: flex;
+            align-items: center; justify-content: center;
+            user-select: none;
         }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    <h2 id="score">Score: 0</h2>
-    <p>Touche l'écran pour diriger le serpent</p>
-</div>
-<canvas id="gameCanvas"></canvas>
+<div id="joystick-container"><div id="joystick-knob"></div></div>
+<div id="jump-btn">SAUT</div>
 
-<script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const scoreEl = document.getElementById('score');
+<script type="module">
+import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resize);
-resize();
+// --- INITIALISATION ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB); // Ciel bleu
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-let score = 0;
-const foods = [];
-const bots = [];
-const FOOD_COUNT = 60;
-const BOT_COUNT = 4;
+// Lumières
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5, 10, 7.5);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0x404040));
 
-const player = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    radius: 8,
-    color: '#00ffcc',
-    tail: [],
-    length: 15,
-    angle: 0,
-    targetAngle: 0
-};
+// Sol (Herbe)
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(100, 100),
+    new THREE.MeshStandardMaterial({ color: 0x44aa44 })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
 
-// --- GESTION DU TACTILE ---
-function handleInput(ex, ey) {
-    const dx = ex - player.x;
-    const dy = ey - player.y;
-    player.targetAngle = Math.atan2(dy, dx);
-}
+// --- PERSONNAGE (Style Roblox) ---
+const playerGroup = new THREE.Group();
+const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), new THREE.MeshStandardMaterial({color: 0x3366ff}));
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({color: 0xffdbac}));
+head.position.y = 1.1;
+playerGroup.add(body, head);
+playerGroup.position.y = 0.75;
+scene.add(playerGroup);
 
-window.addEventListener('touchstart', (e) => {
-    handleInput(e.touches[0].clientX, e.touches[0].clientY);
-}, { passive: false });
+// --- LOGIQUE CAMERA & MOUVEMENT ---
+let moveForward = 0, moveSide = 0;
+let playerYVel = 0;
+let isGrounded = true;
+let cameraAngleX = 0;
+let cameraAngleY = 0;
 
-window.addEventListener('touchmove', (e) => {
-    e.preventDefault(); // Bloque le défilement de la page
-    handleInput(e.touches[0].clientX, e.touches[0].clientY);
-}, { passive: false });
-
-// Support souris aussi pour tester sur PC
-window.addEventListener('mousemove', (e) => {
-    handleInput(e.clientX, e.clientY);
+// Joystick Logic
+const knob = document.getElementById('joystick-knob');
+const container = document.getElementById('joystick-container');
+container.addEventListener('touchmove', (e) => {
+    const rect = container.getBoundingClientRect();
+    const touch = e.touches[0];
+    const dx = touch.clientX - (rect.left + rect.width/2);
+    const dy = touch.clientY - (rect.top + rect.height/2);
+    const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 50);
+    const angle = Math.atan2(dy, dx);
+    
+    knob.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
+    moveForward = -Math.sin(angle) * (dist/50);
+    moveSide = Math.cos(angle) * (dist/50);
+});
+container.addEventListener('touchend', () => {
+    knob.style.transform = `translate(0,0)`;
+    moveForward = 0; moveSide = 0;
 });
 
-class Bot {
-    constructor() { this.reset(); }
-    reset() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
-        this.radius = 7;
-        this.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
-        this.tail = [];
-        this.length = 15;
-        this.angle = Math.random() * Math.PI * 2;
-    }
-    update() {
-        this.angle += (Math.random() - 0.5) * 0.2;
-        this.x += Math.cos(this.angle) * 1.8;
-        this.y += Math.sin(this.angle) * 1.8;
-        if (this.x < 0 || this.x > canvas.width) this.angle = Math.PI - this.angle;
-        if (this.y < 0 || this.y > canvas.height) this.angle = -this.angle;
-        this.tail.unshift({ x: this.x, y: this.y });
-        if (this.tail.length > this.length) this.tail.pop();
-    }
-    draw() { drawSnake(this.tail, this.color, this.radius); }
-}
-
-function spawnFood() {
-    foods.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        radius: 3,
-        color: `hsl(${Math.random() * 360}, 100%, 60%)`
-    });
-}
-
-for (let i = 0; i < FOOD_COUNT; i++) spawnFood();
-for (let i = 0; i < BOT_COUNT; i++) bots.push(new Bot());
-
-function drawSnake(tail, color, radius) {
-    if (tail.length < 2) return;
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = radius * 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.moveTo(tail[0].x, tail[0].y);
-    for (let i = 1; i < tail.length; i++) {
-        ctx.lineTo(tail[i].x, tail[i].y);
-    }
-    ctx.stroke();
-}
-
-function update() {
-    // Interpolation de l'angle pour un virage fluide
-    let diff = player.targetAngle - player.angle;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    player.angle += diff * 0.1;
-
-    player.x += Math.cos(player.angle) * 2.5;
-    player.y += Math.sin(player.angle) * 2.5;
-
-    // Sortie d'écran (téléportation de l'autre côté)
-    if (player.x < 0) player.x = canvas.width;
-    if (player.x > canvas.width) player.x = 0;
-    if (player.y < 0) player.y = canvas.height;
-    if (player.y > canvas.height) player.y = 0;
-
-    player.tail.unshift({ x: player.x, y: player.y });
-    if (player.tail.length > player.length) player.tail.pop();
-
-    foods.forEach((food, i) => {
-        if (Math.hypot(player.x - food.x, player.y - food.y) < player.radius + food.radius) {
-            foods.splice(i, 1);
-            player.length += 1.5;
-            score += 5;
-            scoreEl.innerText = `Score: ${score}`;
-            spawnFood();
+// Tourner l'écran (Caméra)
+let lastTouchX = 0, lastTouchY = 0;
+window.addEventListener('touchmove', (e) => {
+    if (e.target.tagName === 'CANVAS') {
+        const touch = e.touches[0];
+        if (lastTouchX !== 0) {
+            cameraAngleY -= (touch.clientX - lastTouchX) * 0.005;
+            cameraAngleX -= (touch.clientY - lastTouchY) * 0.005;
+            cameraAngleX = Math.max(-0.5, Math.min(0.5, cameraAngleX)); // Limite haut/bas
         }
-    });
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+    }
+}, {passive: false});
+window.addEventListener('touchend', () => { lastTouchX = 0; });
 
-    bots.forEach(bot => bot.update());
+// Saut
+document.getElementById('jump-btn').addEventListener('touchstart', () => {
+    if (isGrounded) { playerYVel = 0.15; isGrounded = false; }
+});
+
+// --- BOUCLE DE JEU ---
+function animate() {
+    requestAnimationFrame(animate);
+
+    // Gravité
+    playerGroup.position.y += playerYVel;
+    if (playerGroup.position.y > 0.75) {
+        playerYVel -= 0.008;
+        isGrounded = false;
+    } else {
+        playerGroup.position.y = 0.75;
+        playerYVel = 0;
+        isGrounded = true;
+    }
+
+    // Déplacement relatif à la caméra
+    playerGroup.rotation.y = cameraAngleY;
+    playerGroup.translateZ(moveForward * 0.1);
+    playerGroup.translateX(moveSide * 0.1);
+
+    // Caméra suit le joueur
+    const camDist = 5;
+    camera.position.x = playerGroup.position.x - Math.sin(cameraAngleY) * camDist;
+    camera.position.z = playerGroup.position.z - Math.cos(cameraAngleY) * camDist;
+    camera.position.y = playerGroup.position.y + 2 + (cameraAngleX * 5);
+    camera.lookAt(playerGroup.position);
+
+    renderer.render(scene, camera);
 }
 
-function loop() {
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
-    foods.forEach(f => {
-        ctx.beginPath();
-        ctx.fillStyle = f.color;
-        ctx.arc(f.x, f.y, f.radius, 0, Math.PI*2);
-        ctx.fill();
-    });
-
-    bots.forEach(b => b.draw());
-    drawSnake(player.tail, player.color, player.radius);
-
-    update();
-    requestAnimationFrame(loop);
-}
-loop();
+animate();
 </script>
 </body>
 </html>
