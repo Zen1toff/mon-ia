@@ -3,167 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA QUANTUM SCANNER v7.0</title>
+    <title>IA QUANTUM SCANNER v7.2 // FIX</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/deeplab"></script>
 
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: white; text-transform: uppercase; cursor: crosshair; }
-        #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(1.1) contrast(1.1); }
-        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.6; z-index: 10; } /* Masque de segmentation */
-        #ui-overlay { position: absolute; inset: 0; z-index: 20; pointer-events: none; border: 2px solid rgba(0,255,255,0.2); }
+        :root { --hacker-cyan: #00ffff; --hacker-bg: #000; }
+        body { margin: 0; background: var(--hacker-bg); overflow: hidden; font-family: 'Courier New', monospace; color: white; text-transform: uppercase; }
         
-        /* Panneau de statut technique */
-        #status { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 10px; border-left: 3px solid #00ffff; font-size: 10px; letter-spacing: 1px; }
-        .loading { color: #ffcc00; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.2; } }
+        /* Loading Screen */
+        #loading-screen { position: fixed; inset: 0; background: var(--hacker-bg); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid var(--hacker-cyan); }
+        .glitch { animation: glitch 1s infinite; color: var(--hacker-cyan); text-align: center; padding: 20px; }
+        @keyframes glitch { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        
+        /* UI */
+        #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; visibility: hidden; }
+        #canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; z-index: 10; pointer-events: none; }
+        #status { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 10px; border-left: 3px solid var(--hacker-cyan); font-size: 10px; z-index: 100; }
+        button { margin-top: 20px; padding: 15px 30px; background: none; border: 1px solid var(--hacker-cyan); color: var(--hacker-cyan); cursor: pointer; font-family: monospace; }
     </style>
 </head>
 <body>
 
+<div id="loading-screen">
+    <div class="glitch" id="load-text">> SYSTEM_OFFLINE<br>READY_TO_DEPLOY</div>
+    <button onclick="main()" id="start-btn">DEPLOY_QUANTUM_CORE</button>
+</div>
+
 <video id="video" autoplay playsinline muted></video>
 <canvas id="canvas"></canvas>
 
-<div id="ui-overlay">
-    <div id="status">
-        [ SYSTEM: <span id="sys-state" class="loading">INITIALIZING_CORE...</span> ]<br>
-        [ MODEL: DEEPLAB_V3_HIGHT_RES ]<br>
-        [ STATUS: ANALYSING_SURFACES ]<br>
-        [ DATA_FEED: <span id="data-count">0</span> POINTS/SEC ]
-    </div>
+<div id="status" style="visibility: hidden;">
+    [ SYSTEM: <span style="color:#0f0">ONLINE</span> ]<br>
+    [ MODEL: DEEPLAB_V3_MOBILE ]<br>
+    [ SCAN: <span id="data-count">0</span> OBJ_DETECTED ]
 </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const sysState = document.getElementById('sys-state');
-    const dataCount = document.getElementById('data-count');
+    const loadText = document.getElementById('load-text');
     let model;
-    let pointData = 0;
 
-    // Simulation de détails et matières basées sur la classe d'objet
-    const materialData = {
-        'person': ['BIOMETRIC: OK', 'TEMP: 36.8°C', 'ID: SUBJECT_#882'],
-        'table': ['MAT: ORGANIC/WOOD', 'STRUCT: STABLE', 'SURFACE: SMOOTH'],
-        'chair': ['MAT: POLYMER/METAL', 'STRUCT: LOAD_BEARING'],
-        'bottle': ['MAT: GLASS/PLASTIC', 'CONTENT: LIQUID_POSSIBLE'],
-        'dining table': ['MAT: WOOD/LAMINATE', 'SURFACE: LARGE_AREA'],
-        'car': ['MAT: METAL/PAINT', 'STRUCT: MOBILE_UNIT'],
-        'mouchoir': ['MAT: CELLULOSE/PAPER', 'STRUCT: SOFT_LAYER'], // Ajout générique
-        'rouleau': ['MAT: CELLULOSE/PAPER', 'STRUCT: CYLINDRICAL'], // Ajout générique
-        'default': ['MAT: UNKNOWN', 'STRUCT: ANALYSING', 'DETAIL: SCANNING_RAW_DATA']
-    };
-
-    // Configuration de la caméra de l'iPhone (Caméra arrière, résolution modérée pour la vitesse)
-    async function setupCamera() {
+    async function main() {
+        document.getElementById('start-btn').style.display = 'none';
+        loadText.innerHTML = "> LOADING_MODEL...<br>PLEASE_WAIT";
+        
         try {
+            // Utilisation du modèle 'pascal' qui est plus stable sur mobile
+            model = await deeplab.load({ base: 'pascal', quantizationBytes: 2 });
+            
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: 640, height: 480 },
+                video: { facingMode: "environment" },
                 audio: false
             });
             video.srcObject = stream;
-            return new Promise((resolve) => { video.onloadedmetadata = () => resolve(video); });
+            
+            video.onloadedmetadata = () => {
+                document.getElementById('loading-screen').style.display = 'none';
+                video.style.visibility = 'visible';
+                canvas.style.visibility = 'visible';
+                document.getElementById('status').style.visibility = 'visible';
+                predict();
+            };
         } catch (e) {
-            sysState.innerText = "CAMERA_ERROR: " + e.message;
-            sysState.classList.remove('loading');
-            sysState.style.color = 'red';
+            loadText.innerHTML = `<span style="color:red">> ERROR: ${e.message}</span>`;
         }
     }
 
-    // Fonction principale d'analyse
     async function predict() {
-        if (!model) return;
-        
-        // 1. Obtenir la carte de segmentation
         const prediction = await model.segment(video);
         
-        // Ajuster la taille du canvas
-        if (canvas.width !== video.videoWidth) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
         
-        // 2. Créer l'image de segmentation (zones colorées)
-        const segmentationImage = ctx.createImageData(prediction.width, prediction.height);
-        const uniqueClasses = new Set();
-        
+        const imgData = ctx.createImageData(prediction.width, prediction.height);
         for (let i = 0; i < prediction.legend.length; i++) {
             const rgb = prediction.legend[i];
-            const indices = prediction.mask[i];
-            indices.forEach(index => {
-                segmentationImage.data[index * 4] = rgb[0];
-                segmentationImage.data[index * 4 + 1] = rgb[1];
-                segmentationImage.data[index * 4 + 2] = rgb[2];
-                segmentationImage.data[index * 4 + 3] = 180; // Opacité (Alpha)
-                
-                // Pour la détection de classes plus tard
-                if (index % prediction.width === 0 && index / prediction.width === 0) {
-                     // Optimisation: on ne regarde pas tout le masque
-                }
+            const mask = prediction.mask[i];
+            mask.forEach(idx => {
+                imgData.data[idx*4] = rgb[0];
+                imgData.data[idx*4+1] = rgb[1];
+                imgData.data[idx*4+2] = rgb[2];
+                imgData.data[idx*4+3] = 150;
             });
-            uniqueClasses.add(prediction.legend[i]); // Ajout pour le décompte générique
         }
-        ctx.putImageData(segmentationImage, 0, 0);
+        ctx.putImageData(imgData, 0, 0);
 
-        // 3. Dessiner les Tags et Détails (Analyse simulée)
+        // Dessiner les noms des objets
         ctx.fillStyle = "white";
-        ctx.font = "bold 16px Courier New";
-        
-        const detectedClasses = Object.keys(prediction.legend);
-        pointData = detectedClasses.length * 10; // Simulation de points de données
-
-        detectedClasses.forEach((cls, index) => {
-            // Création de fausses coordonnées pour le style
-            const x = Math.random() * (canvas.width - 200) + 50;
-            const y = Math.random() * (canvas.height - 100) + 50;
-            
-            // Carré de point de focus
-            ctx.fillStyle = "cyan";
-            ctx.fillRect(x, y, 10, 10);
-            
-            // Texte principal
-            ctx.fillStyle = "white";
-            ctx.fillText(`> ${cls.toUpperCase()}`, x + 15, y + 10);
-            
-            // Sous-détails (Matières, Structure)
-            ctx.font = "9px Courier New";
-            ctx.fillStyle = "rgba(255,255,255,0.7)";
-            const details = materialData[cls] || materialData['default'];
-            details.forEach((detail, dIndex) => {
-                ctx.fillText(detail, x + 15, y + 25 + (dIndex * 12));
-            });
-            ctx.font = "bold 16px Courier New"; // Reset
+        ctx.font = "bold 20px Courier New";
+        Object.keys(prediction.legend).forEach((obj, i) => {
+            if(obj !== 'background') {
+                ctx.fillText(`> ${obj.toUpperCase()}`, 30, 50 + (i * 30));
+            }
         });
 
-        // Mise à jour du compteur de données
-        dataCount.innerText = pointData + (Math.floor(Math.random()*100));
-
+        document.getElementById('data-count').innerText = Object.keys(prediction.legend).length - 1;
         requestAnimationFrame(predict);
     }
-
-    async function main() {
-        try {
-            // Charger le modèle 'ade20k' (plus complet pour les scènes complexes et surfaces)
-            model = await deeplab.load({ base: 'ade20k' });
-            sysState.innerText = "ACTIVE - DEEPLAB_V3";
-            sysState.classList.remove('loading');
-            sysState.style.color = '#00ffff';
-            
-            await setupCamera();
-            video.play();
-            predict();
-        } catch (e) {
-            sysState.innerText = "CORE_ERROR: " + e.message;
-            sysState.classList.remove('loading');
-            sysState.style.color = 'red';
-        }
-    }
-
-    // Lancer au clic (Nécessaire sur iPhone pour la caméra)
-    document.body.onclick = () => {
-        if(sysState.innerText === "INITIALIZING_CORE...") main();
-    };
 </script>
 </body>
 </html>
