@@ -2,34 +2,121 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Web Effects Pro - Montage IA</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>IA 3D Cloud - Sync PC/Mobile</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; color: #0f0; font-family: monospace; overflow: hidden; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,20,0,0.8); padding: 10px; border: 1px solid #0f0; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: center; gap: 10px; z-index: 20; }
+        button { padding: 15px; background: #0f0; border: none; font-weight: bold; cursor: pointer; }
+        #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.4; display: none; }
+        canvas { display: block; }
+    </style>
 </head>
 <body>
 
-<div class="app-container">
-    <aside class="toolbar">
-        <button onclick="applyEffect('sepia')">Sépia</button>
-        <button onclick="applyEffect('invert')">Inverser</button>
-        <button onclick="applyEffect('matrix')">Mode Matrix</button>
-        <div class="divider"></div>
-        <input type="file" id="uploader" accept="video/*">
-    </aside>
-
-    <main class="preview-area">
-        <div class="monitor">
-            <video id="player" controls></video>
-            <canvas id="effect-overlay"></canvas>
-        </div>
-        
-        <div class="timeline">
-            <div class="playhead"></div>
-            <div class="track">Piste Vidéo 1</div>
-        </div>
-    </main>
+<div id="ui">
+    STATUS: <span id="status">En attente...</span><br>
+    POINTS: <span id="count">0</span>
 </div>
 
-<script src="script.js"></script>
+<video id="video" autoplay playsinline muted></video>
+<div class="controls">
+    <button id="btn-pc">MODE PC (RECEVEUR)</button>
+    <button id="btn-mobile">MODE MOBILE (SCANNER)</button>
+</div>
+
+<script>
+    const statusEl = document.getElementById('status');
+    const countEl = document.getElementById('count');
+    const video = document.getElementById('video');
+    let peer, conn;
+    let pointCount = 0;
+
+    // --- PARTIE 3D (THREE.JS) ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.GridHelper(10, 20, 0x004400, 0x002200));
+    camera.position.set(0, 2, 5);
+    camera.lookAt(0, 0, 0);
+
+    const pointsGroup = new THREE.Group();
+    scene.add(pointsGroup);
+
+    function addPointToScene(data) {
+        const geometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(data.x, data.y, data.z);
+        pointsGroup.add(mesh);
+        pointCount++;
+        countEl.innerText = pointCount;
+    }
+
+    // --- PARTIE RÉSEAU (PEERJS) ---
+    const SESSION_ID = "mon-scan-ia-unique-123"; // Change ceci pour tes tests
+
+    // Mode PC : Attend la connexion du téléphone
+    document.getElementById('btn-pc').onclick = () => {
+        peer = new Peer(SESSION_ID);
+        statusEl.innerText = "Prêt. En attente du téléphone...";
+        peer.on('connection', (c) => {
+            conn = c;
+            statusEl.innerText = "Mobile connecté !";
+            conn.on('data', (data) => addPointToScene(data));
+        });
+        document.querySelector('.controls').style.display = 'none';
+    };
+
+    // Mode Mobile : Se connecte au PC et envoie les points
+    document.getElementById('btn-mobile').onclick = async () => {
+        peer = new Peer();
+        video.style.display = 'block';
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = stream;
+
+        statusEl.innerText = "Connexion au PC...";
+        conn = peer.connect(SESSION_ID);
+        
+        conn.on('open', () => {
+            statusEl.innerText = "Lié au PC - Scan en cours";
+            setInterval(() => {
+                const pointData = {
+                    x: (Math.random() - 0.5) * 4,
+                    y: Math.random() * 2,
+                    z: (Math.random() - 0.5) * 4
+                };
+                conn.send(pointData);
+                addPointToScene(pointData); // Affiche aussi sur le mobile
+            }, 200);
+        });
+        document.querySelector('.controls').style.display = 'none';
+    };
+
+    // Animation 3D
+    function animate() {
+        requestAnimationFrame(animate);
+        if (peer && peer.id === SESSION_ID) {
+            pointsGroup.rotation.y += 0.005; // Le PC fait tourner la vue
+        }
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    // Rotation manuelle sur PC (Souris)
+    window.onmousemove = (e) => {
+        if(peer && peer.id === SESSION_ID) {
+            camera.position.x = Math.sin(e.clientX * 0.01) * 5;
+            camera.position.z = Math.cos(e.clientX * 0.01) * 5;
+            camera.lookAt(0, 1, 0);
+        }
+    };
+</script>
 </body>
 </html>
