@@ -2,101 +2,88 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mini Village Builder</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caméra IA - Détection de Main</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
     <style>
-        body { margin: 0; background: #2c3e50; color: white; font-family: sans-serif; overflow: hidden; }
-        #ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
-        .stat { font-size: 20px; font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; margin-bottom: 5px; }
-        #shop { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
-        button { padding: 15px; border: none; border-radius: 10px; background: #e67e22; color: white; font-weight: bold; cursor: pointer; pointer-events: auto; }
-        canvas { display: block; touch-action: none; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        .container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        #input_video { display: none; } /* On cache la vidéo brute */
+        #output_canvas { width: 100%; height: 100%; object-fit: cover; }
+        .info { position: absolute; top: 10px; left: 10px; color: #00ff00; background: rgba(0,0,0,0.5); padding: 5px; font-size: 12px; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="ui">
-        <div class="stat">Or: <span id="goldText">500</span> 🪙</div>
-    </div>
+<div class="container">
+    <div class="info">IA Active : Détection de points de contrôle</div>
+    <video id="input_video"></video>
+    <canvas id="output_canvas"></canvas>
+</div>
 
-    <div id="shop">
-        <button onclick="selectBuilding('mine')">Mine d'Or (100 🪙)</button>
-        <button onclick="selectBuilding('cabane')">Cabane (50 🪙)</button>
-    </div>
+<script type="module">
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
 
-    <canvas id="gameCanvas"></canvas>
+    function onResults(results) {
+        // Ajuster la taille du canvas à la vidéo
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const goldText = document.getElementById('goldText');
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // Dessiner l'image de la caméra
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-        let gold = 500;
-        let gridSize = 40; // Taille d'une case
-        let buildings = [];
-        let selectedType = null;
+        if (results.multiHandLandmarks) {
+            for (const landmarks of results.multiHandLandmarks) {
+                // 1. Dessiner les lignes et points (Style Cyberpunk)
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
 
-        // Ajuster la taille du canvas
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        function selectBuilding(type) {
-            selectedType = type;
-        }
-
-        // Click ou Touch sur l'iPhone
-        canvas.addEventListener('pointerdown', (e) => {
-            if (!selectedType) return;
-
-            const cost = selectedType === 'mine' ? 100 : 50;
-            if (gold >= cost) {
-                // Centrer sur la grille
-                const x = Math.floor(e.clientX / gridSize) * gridSize;
-                const y = Math.floor(e.clientY / gridSize) * gridSize;
-
-                // Vérifier si la place est libre
-                if (!buildings.find(b => b.x === x && b.y === y)) {
-                    buildings.push({ x, y, type: selectedType, lastProd: Date.now() });
-                    gold -= cost;
-                    selectedType = null; // Désélectionner après la pose
-                }
+                // 2. Dessiner les coordonnées numériques (L'effet de ta capture)
+                canvasCtx.fillStyle = "white";
+                canvasCtx.font = "8px monospace";
+                landmarks.forEach((point, index) => {
+                    const x = point.x * canvasElement.width;
+                    const y = point.y * canvasElement.height;
+                    // On affiche un nombre aléatoire simulant un ID ou la coordonnée Z
+                    const val = Math.round(point.z * -10000);
+                    canvasCtx.fillText(val, x + 5, y - 5);
+                });
             }
-        });
-
-        // Boucle de jeu (60 FPS)
-        function update() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Dessiner la grille
-            ctx.strokeStyle = "rgba(255,255,255,0.1)";
-            for(let x=0; x<canvas.width; x+=gridSize) {
-                for(let y=0; y<canvas.height; y+=gridSize) {
-                    ctx.strokeRect(x, y, gridSize, gridSize);
-                }
-            }
-
-            // Gérer les bâtiments et la production
-            buildings.forEach(b => {
-                // Dessin simple (Carrés de couleurs)
-                ctx.fillStyle = b.type === 'mine' ? '#f1c40f' : '#ecf0f1';
-                ctx.fillRect(b.x + 2, b.y + 2, gridSize - 4, gridSize - 4);
-
-                // Production d'or toutes les 2 secondes pour les mines
-                if (b.type === 'mine' && Date.now() - b.lastProd > 2000) {
-                    gold += 10;
-                    b.lastProd = Date.now();
-                }
-            });
-
-            goldText.innerText = gold;
-            requestAnimationFrame(update);
         }
+        canvasCtx.restore();
+    }
 
-        update();
-    </script>
+    const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            await hands.send({image: videoElement});
+        },
+        width: 1280,
+        height: 720,
+        facingMode: "environment" // Utilise la caméra ARRIÈRE de l'iPhone
+    });
+    
+    camera.start();
+</script>
 </body>
 </html>
