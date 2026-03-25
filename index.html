@@ -3,18 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA Vision Live</title>
+    <title>IA SCANNER DIRECT</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: monospace; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        #status { position: absolute; top: 10px; left: 10px; color: #ff3300; z-index: 20; font-size: 10px; text-shadow: 1px 1px black; }
+        #ui { position: absolute; bottom: 20px; left: 20px; color: #0f0; z-index: 10; font-size: 10px; background: rgba(0,20,0,0.6); padding: 10px; border: 1px solid #0f0; pointer-events: none; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, transparent 30%, rgba(0,40,0,0.4) 100%); pointer-events: none; z-index: 5; }
     </style>
 </head>
 <body>
 
-<div id="status">SCANNER INITIALISATION...</div>
+<div id="ui">SYSTEM_READY: SCANNING...<br>OBJECT_DETECTION: ON<br>SURFACE_ANALYSIS: ACTIVE</div>
+<div id="overlay"></div>
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <canvas id="canvas"></canvas>
 
@@ -22,90 +24,92 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const status = document.getElementById('status');
     let model;
 
-    async function startApp() {
-        try {
-            // 1. Charger le modèle ultra-léger pour le direct
-            model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-            status.innerText = "IA PRÊTE. ACCÈS CAMÉRA...";
-
-            // 2. Configurer la caméra arrière de l'iPhone
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    facingMode: "environment",
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                },
-                audio: false
-            });
-            video.srcObject = stream;
-            
-            video.onloadedmetadata = () => {
-                video.play();
-                status.innerText = "SCAN EN DIRECT : ACTIF";
-                render();
-            };
-        } catch (e) {
-            status.innerText = "ERREUR : " + e.message;
-        }
+    async function init() {
+        // Chargement du modèle ultra-rapide
+        model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+        
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment", width: 640, height: 480 },
+            audio: false
+        });
+        video.srcObject = stream;
+        video.play();
+        render();
     }
 
     function render() {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
-        // Dessiner l'image caméra
-        ctx.drawImage(video, 0, 0);
+        // 1. Dessiner la vidéo de fond
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Appliquer l'analyse IA
-        model.detect(video).then(predictions => {
-            // Effet de grain/bruit Matrix
-            ctx.fillStyle = "rgba(255, 60, 0, 0.15)";
-            
-            predictions.forEach(p => {
-                const [x, y, w, h] = p.bbox;
+        // 2. Lancer la détection (en parallèle pour ne pas ramer)
+        model.detect(video).then(preds => {
+            // Effet de scan laser horizontal
+            const scanY = (Date.now() / 10) % canvas.height;
+            ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
+            ctx.stroke();
 
-                // 1. Zone de détection (L'effet orange de ta photo)
-                ctx.fillStyle = "rgba(255, 100, 0, 0.3)";
-                ctx.fillRect(x, y, w, h);
-                ctx.strokeStyle = "#ff3300";
+            preds.forEach(p => {
+                const [x, y, w, h] = [
+                    (p.bbox[0] / video.videoWidth) * canvas.width,
+                    (p.bbox[1] / video.videoHeight) * canvas.height,
+                    (p.bbox[2] / video.videoWidth) * canvas.width,
+                    (p.bbox[3] / video.videoHeight) * canvas.height
+                ];
+
+                // Carré de l'objet (Style Techno)
+                ctx.strokeStyle = "#0f0";
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x, y, w, h);
-
-                // 2. Chiffres qui flottent (Coordonnées dynamiques)
-                ctx.fillStyle = "white";
-                ctx.font = "bold 12px monospace";
-                ctx.fillText(`ID_${Math.floor(x+y)}`, x + 5, y + 15);
-                ctx.fillText(`VAL:${(p.score).toFixed(4)}`, x + 5, y + 30);
                 
-                // Lignes de connexion vers le centre (style HUD)
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x-20, y-20);
-                ctx.stroke();
+                // Remplissage transparent (L'effet zone)
+                ctx.fillStyle = "rgba(0, 255, 0, 0.1)";
+                ctx.fillRect(x, y, w, h);
+
+                // Texte de description sur l'objet
+                ctx.fillStyle = "#0f0";
+                ctx.font = "bold 12px monospace";
+                ctx.fillText(`> ${p.class.toUpperCase()}`, x, y - 15);
+                ctx.fillText(`CONF: ${Math.round(p.score * 100)}%`, x, y - 5);
+                
+                // Simulation de sous-objets (points sur la surface)
+                for(let i=0; i<3; i++) {
+                    let px = x + Math.random() * w;
+                    let py = y + Math.random() * h;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 2, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.font = "8px monospace";
+                    ctx.fillText(Math.floor(Math.random()*999), px+5, py);
+                }
             });
 
-            // 3. Scan global (petits points partout)
-            for(let i=0; i<30; i++) {
-                ctx.fillStyle = Math.random() > 0.5 ? "#ff3300" : "#ffffff";
-                const sx = Math.random() * canvas.width;
-                const sy = Math.random() * canvas.height;
-                ctx.fillRect(sx, sy, 1, 1);
-                if(Math.random() > 0.95) ctx.fillText(Math.floor(Math.random()*9999), sx, sy);
+            // 3. Analyse de "Bruit" (Points aléatoires pour les surfaces comme le bois/papier)
+            for(let i=0; i<20; i++) {
+                let rx = Math.random() * canvas.width;
+                let ry = Math.random() * canvas.height;
+                ctx.fillStyle = "rgba(0, 255, 0, 0.3)";
+                ctx.fillRect(rx, ry, 1, 1);
+                if(Math.random() > 0.98) {
+                    ctx.fillText("DATA_"+Math.floor(rx), rx, ry);
+                }
             }
         });
 
         requestAnimationFrame(render);
     }
 
-    // Lancer au clic pour éviter les blocages iOS
+    // Démarrage au clic (Obligatoire sur iPhone)
     document.body.onclick = () => {
-        if(!model) startApp();
+        if(!model) init();
     };
-    
-    status.innerText = "TOUCHEZ L'ÉCRAN POUR LANCER LE SCAN";
 </script>
 </body>
 </html>
