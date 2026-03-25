@@ -3,113 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IA SCANNER DIRECT</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <title>IA ANALYSE COMPORTEMENTALE</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        #ui { position: absolute; bottom: 20px; left: 20px; color: #0f0; z-index: 10; font-size: 10px; background: rgba(0,20,0,0.6); padding: 10px; border: 1px solid #0f0; pointer-events: none; }
-        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, transparent 30%, rgba(0,40,0,0.4) 100%); pointer-events: none; z-index: 5; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: #ff6600; }
+        #output_canvas { width: 100vw; height: 100vh; object-fit: cover; filter: brightness(1.2) contrast(1.1); }
+        .ui-panel { position: absolute; top: 10px; right: 10px; background: rgba(20, 0, 0, 0.8); border: 1px solid #ff3300; padding: 10px; font-size: 10px; z-index: 100; pointer-events: none;}
+        .loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; }
     </style>
 </head>
 <body>
 
-<div id="ui">SYSTEM_READY: SCANNING...<br>OBJECT_DETECTION: ON<br>SURFACE_ANALYSIS: ACTIVE</div>
-<div id="overlay"></div>
-<video id="video" autoplay playsinline muted style="display:none;"></video>
-<canvas id="canvas"></canvas>
+<div id="loader" class="loading">CHARGEMENT DU NOYAU IA...</div>
+<div class="ui-panel" id="ui-data">
+    ANALYSE COMPORTEMENTALE : ON<br>
+    SCANNER BIOMÉTRIQUE : VEILLE<br>
+    DÉTECTION DE TEXTURE : ACTIVÉE
+</div>
 
-<script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    let model;
+<video id="input_video" style="display:none;"></video>
+<canvas id="output_canvas"></canvas>
 
-    async function init() {
-        // Chargement du modèle ultra-rapide
-        model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+<script type="module">
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const loader = document.getElementById('loader');
+    const uiData = document.getElementById('ui-data');
+
+    function onResults(results) {
+        loader.style.display = 'none';
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
         
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment", width: 640, height: 480 },
-            audio: false
-        });
-        video.srcObject = stream;
-        video.play();
-        render();
-    }
+        // 1. Image caméra en fond
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-    function render() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        // 2. Filtre de "Vision Thermique/Orange"
+        canvasCtx.fillStyle = "rgba(255, 100, 0, 0.1)";
+        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
 
-        // 1. Dessiner la vidéo de fond
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (results.poseLandmarks) {
+            // Dessiner le squelette (comportement)
+            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
+                          {color: '#ff3300', lineWidth: 2});
+            drawLandmarks(canvasCtx, results.poseLandmarks,
+                         {color: '#ffffff', lineWidth: 1, radius: 2});
 
-        // 2. Lancer la détection (en parallèle pour ne pas ramer)
-        model.detect(video).then(preds => {
-            // Effet de scan laser horizontal
-            const scanY = (Date.now() / 10) % canvas.height;
-            ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
-            ctx.stroke();
+            // Analyse de l'action (Exemple: bras levé)
+            const leftShoulder = results.poseLandmarks[11];
+            const leftWrist = results.poseLandmarks[15];
+            if(leftWrist.y < leftShoulder.y) {
+                uiData.innerHTML = "ACTION : MOUVEMENT DÉTECTÉ<br>OBJET EN MAIN : PROBABLE<br>STRESS : BAS";
+            } else {
+                uiData.innerHTML = "ACTION : REPOS / OBSERVATION<br>SCAN SURFACES : OK<br>ID_PERSON : #8829";
+            }
 
-            preds.forEach(p => {
-                const [x, y, w, h] = [
-                    (p.bbox[0] / video.videoWidth) * canvas.width,
-                    (p.bbox[1] / video.videoHeight) * canvas.height,
-                    (p.bbox[2] / video.videoWidth) * canvas.width,
-                    (p.bbox[3] / video.videoHeight) * canvas.height
-                ];
-
-                // Carré de l'objet (Style Techno)
-                ctx.strokeStyle = "#0f0";
-                ctx.lineWidth = 2;
-                ctx.strokeRect(x, y, w, h);
-                
-                // Remplissage transparent (L'effet zone)
-                ctx.fillStyle = "rgba(0, 255, 0, 0.1)";
-                ctx.fillRect(x, y, w, h);
-
-                // Texte de description sur l'objet
-                ctx.fillStyle = "#0f0";
-                ctx.font = "bold 12px monospace";
-                ctx.fillText(`> ${p.class.toUpperCase()}`, x, y - 15);
-                ctx.fillText(`CONF: ${Math.round(p.score * 100)}%`, x, y - 5);
-                
-                // Simulation de sous-objets (points sur la surface)
-                for(let i=0; i<3; i++) {
-                    let px = x + Math.random() * w;
-                    let py = y + Math.random() * h;
-                    ctx.beginPath();
-                    ctx.arc(px, py, 2, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.font = "8px monospace";
-                    ctx.fillText(Math.floor(Math.random()*999), px+5, py);
+            // Ajouter des chiffres "data" sur chaque articulation
+            results.poseLandmarks.forEach((lm, i) => {
+                if(i % 5 === 0) { // On ne sature pas trop l'écran
+                    canvasCtx.fillStyle = "white";
+                    canvasCtx.font = "8px monospace";
+                    canvasCtx.fillText(`V_${Math.round(lm.z * -1000)}`, lm.x * canvasElement.width + 10, lm.y * canvasElement.height);
                 }
             });
+        }
 
-            // 3. Analyse de "Bruit" (Points aléatoires pour les surfaces comme le bois/papier)
-            for(let i=0; i<20; i++) {
-                let rx = Math.random() * canvas.width;
-                let ry = Math.random() * canvas.height;
-                ctx.fillStyle = "rgba(0, 255, 0, 0.3)";
-                ctx.fillRect(rx, ry, 1, 1);
-                if(Math.random() > 0.98) {
-                    ctx.fillText("DATA_"+Math.floor(rx), rx, ry);
-                }
+        // 3. Simulation d'analyse de texture (Points de surface pour bois/papier)
+        for (let i = 0; i < 40; i++) {
+            const rx = Math.random() * canvasElement.width;
+            const ry = Math.random() * canvasElement.height;
+            canvasCtx.fillStyle = "rgba(255, 255, 255, 0.4)";
+            canvasCtx.fillRect(rx, ry, 1, 1);
+            if(Math.random() > 0.98) {
+                canvasCtx.fillStyle = "#ff6600";
+                canvasCtx.fillText("SURFACE_MAT:" + (Math.random() > 0.5 ? "ORGANIC" : "SYNTHETIC"), rx, ry);
             }
-        });
+        }
 
-        requestAnimationFrame(render);
+        canvasCtx.restore();
     }
 
-    // Démarrage au clic (Obligatoire sur iPhone)
-    document.body.onclick = () => {
-        if(!model) init();
-    };
+    const pose = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+        modelComplexity: 1, // 1 pour la fluidité sur iPhone, 2 pour la précision extrême
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    pose.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            await pose.send({image: videoElement});
+        },
+        width: 640,
+        height: 480,
+        facingMode: "environment"
+    });
+    
+    // Démarrage au clic pour iPhone
+    document.body.onclick = () => camera.start();
 </script>
 </body>
 </html>
