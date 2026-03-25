@@ -3,87 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Caméra IA - Détection de Main</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <title>IA Vision Totale - Analyse de Surface</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
-        .container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        #input_video { display: none; } /* On cache la vidéo brute */
-        #output_canvas { width: 100%; height: 100%; object-fit: cover; }
-        .info { position: absolute; top: 10px; left: 10px; color: #00ff00; background: rgba(0,0,0,0.5); padding: 5px; font-size: 12px; pointer-events: none; }
+        body { margin: 0; background: #000; color: #0f0; overflow: hidden; font-family: 'Courier New', monospace; }
+        canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; }
+        .ui-overlay {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            background: rgba(0, 255, 0, 0.1); border-left: 3px solid #0f0;
+            padding: 10px; pointer-events: none; text-transform: uppercase; font-size: 12px;
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="info">IA Active : Détection de points de contrôle</div>
-    <video id="input_video"></video>
-    <canvas id="output_canvas"></canvas>
+<div class="ui-overlay">
+    Système : Actif<br>
+    Scan de surface : En cours...<br>
+    Mode : Analyse de texture & segmentation
 </div>
 
-<script type="module">
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
+<video id="video" autoplay playsinline muted style="display:none;"></video>
+<canvas id="canvas"></canvas>
 
-    function onResults(results) {
-        // Ajuster la taille du canvas à la vidéo
-        canvasElement.width = videoElement.videoWidth;
-        canvasElement.height = videoElement.videoHeight;
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let model;
 
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        
-        // Dessiner l'image de la caméra
-        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-        if (results.multiHandLandmarks) {
-            for (const landmarks of results.multiHandLandmarks) {
-                // 1. Dessiner les lignes et points (Style Cyberpunk)
-                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-                drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
-
-                // 2. Dessiner les coordonnées numériques (L'effet de ta capture)
-                canvasCtx.fillStyle = "white";
-                canvasCtx.font = "8px monospace";
-                landmarks.forEach((point, index) => {
-                    const x = point.x * canvasElement.width;
-                    const y = point.y * canvasElement.height;
-                    // On affiche un nombre aléatoire simulant un ID ou la coordonnée Z
-                    const val = Math.round(point.z * -10000);
-                    canvasCtx.fillText(val, x + 5, y - 5);
-                });
-            }
-        }
-        canvasCtx.restore();
+    // Configuration de la caméra iPhone (arrière)
+    async function setupCamera() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false,
+        });
+        video.srcObject = stream;
+        return new Promise((resolve) => {
+            video.onloadedmetadata = () => resolve(video);
+        });
     }
 
-    const hands = new Hands({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
+    async function detect() {
+        const predictions = await model.detect(video);
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 1. Dessiner le flux vidéo original
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-    });
+        // 2. Ajouter un filtre "Scan" (assombrit légèrement pour faire ressortir l'IA)
+        ctx.fillStyle = "rgba(0, 40, 0, 0.2)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    hands.onResults(onResults);
+        predictions.forEach(prediction => {
+            const [x, y, width, height] = prediction.bbox;
+            
+            // Dessiner le rectangle de détection (Bounding Box)
+            ctx.strokeStyle = "#0f0";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
 
-    const camera = new Camera(videoElement, {
-        onFrame: async () => {
-            await hands.send({image: videoElement});
-        },
-        width: 1280,
-        height: 720,
-        facingMode: "environment" // Utilise la caméra ARRIÈRE de l'iPhone
-    });
-    
-    camera.start();
+            // Effet de "data" qui défile (comme sur tes photos)
+            ctx.fillStyle = "#0f0";
+            ctx.font = "10px monospace";
+            
+            // On génère des fausses données techniques pour le style
+            for(let i = 0; i < 5; i++) {
+                const randomId = Math.floor(Math.random() * 99999);
+                ctx.fillText(`ID_${randomId} POS_Z:${(Math.random()).toFixed(4)}`, x + 5, y + (i * 12) + 15);
+            }
+
+            // Étiquette de l'objet
+            ctx.fillText(`> ${prediction.class.toUpperCase()} [${Math.round(prediction.score * 100)}%]`, x, y - 10);
+        });
+
+        // Simuler des points de scan sur toute la surface (pour l'effet bois/papier)
+        for (let i = 0; i < 15; i++) {
+            const sx = Math.random() * canvas.width;
+            const sy = Math.random() * canvas.height;
+            ctx.fillStyle = "rgba(0, 255, 0, 0.5)";
+            ctx.fillRect(sx, sy, 2, 2);
+            if (Math.random() > 0.9) {
+                ctx.fillText(Math.floor(Math.random() * 1000), sx + 5, sy);
+            }
+        }
+
+        requestAnimationFrame(detect);
+    }
+
+    async function main() {
+        model = await cocoSsd.load();
+        await setupCamera();
+        video.play();
+        detect();
+    }
+
+    main();
 </script>
 </body>
 </html>
