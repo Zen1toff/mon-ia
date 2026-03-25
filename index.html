@@ -3,158 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mini Blox 3D</title>
+    <title>Mini Rocket Sideswipe</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; touch-action: none; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #222; touch-action: none; font-family: sans-serif; }
         canvas { display: block; }
-        
-        /* UI - Joystick */
-        #joystick-container {
-            position: absolute; bottom: 40px; left: 40px;
-            width: 120px; height: 120px; background: rgba(255,255,255,0.2);
-            border-radius: 50%; touch-action: none;
-        }
-        #joystick-knob {
-            position: absolute; top: 35px; left: 35px;
-            width: 50px; height: 50px; background: white;
-            border-radius: 50%; opacity: 0.8;
-        }
-
-        /* UI - Bouton Sauter */
-        #jump-btn {
-            position: absolute; bottom: 60px; right: 40px;
-            width: 70px; height: 70px; background: rgba(255,255,255,0.5);
-            border: 4px solid white; border-radius: 50%;
-            color: white; font-weight: bold; display: flex;
-            align-items: center; justify-content: center;
-            user-select: none;
-        }
+        #ui { position: absolute; top: 10px; width: 100%; text-align: center; color: white; pointer-events: none; }
+        #controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; }
+        .btn { width: 70px; height: 70px; background: rgba(255,255,255,0.3); border: 3px solid white; border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="joystick-container"><div id="joystick-knob"></div></div>
-<div id="jump-btn">SAUT</div>
+<div id="ui"><h1>Score: <span id="s1">0</span> - <span id="s2">0</span></h1></div>
+<div id="controls">
+    <div id="joystick" class="btn">DIR</div>
+    <div id="boost" class="btn">BOOST</div>
+</div>
 
-<script type="module">
-import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+<script>
+// --- CONFIGURATION MATTER.JS ---
+const { Engine, Render, Runner, Bodies, Composite, Body, Vector } = Matter;
+const engine = Engine.create();
+const render = Render.create({
+    element: document.body,
+    engine: engine,
+    options: { width: window.innerWidth, height: window.innerHeight, wireframes: false, background: '#1a1a2e' }
+});
 
-// --- INITIALISATION ---
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB); // Ciel bleu
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+// --- ÉLÉMENTS DU JEU ---
+const w = window.innerWidth;
+const h = window.innerHeight;
 
-// Lumières
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(5, 10, 7.5);
-scene.add(light);
-scene.add(new THREE.AmbientLight(0x404040));
+// Murs et Sol
+const ground = Bodies.rectangle(w/2, h, w, 60, { isStatic: true, render: { fillStyle: '#333' } });
+const ceiling = Bodies.rectangle(w/2, 0, w, 60, { isStatic: true });
+const leftWall = Bodies.rectangle(0, h/2, 60, h, { isStatic: true });
+const rightWall = Bodies.rectangle(w, h/2, 60, h, { isStatic: true });
 
-// Sol (Herbe)
-const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(100, 100),
-    new THREE.MeshStandardMaterial({ color: 0x44aa44 })
-);
-floor.rotation.x = -Math.PI / 2;
-scene.add(floor);
+// La Voiture (un rectangle bleu)
+const car = Bodies.rectangle(200, h-100, 60, 30, { 
+    friction: 0.5, 
+    restitution: 0.1,
+    render: { fillStyle: '#00d2ff' } 
+});
 
-// --- PERSONNAGE (Style Roblox) ---
-const playerGroup = new THREE.Group();
-const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), new THREE.MeshStandardMaterial({color: 0x3366ff}));
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({color: 0xffdbac}));
-head.position.y = 1.1;
-playerGroup.add(body, head);
-playerGroup.position.y = 0.75;
-scene.add(playerGroup);
+// Le Ballon
+const ball = Bodies.circle(w/2, h/2, 30, { 
+    restitution: 0.8, 
+    friction: 0.05,
+    render: { fillStyle: '#ffffff' } 
+});
 
-// --- LOGIQUE CAMERA & MOUVEMENT ---
-let moveForward = 0, moveSide = 0;
-let playerYVel = 0;
-let isGrounded = true;
-let cameraAngleX = 0;
-let cameraAngleY = 0;
+Composite.add(engine.world, [ground, ceiling, leftWall, rightWall, car, ball]);
 
-// Joystick Logic
-const knob = document.getElementById('joystick-knob');
-const container = document.getElementById('joystick-container');
-container.addEventListener('touchmove', (e) => {
-    const rect = container.getBoundingClientRect();
+// --- COMMANDES TACTILES ---
+let isBoosting = false;
+let joystickDir = { x: 0, y: 0 };
+
+document.getElementById('boost').addEventListener('touchstart', () => isBoosting = true);
+document.getElementById('boost').addEventListener('touchend', () => isBoosting = false);
+
+document.getElementById('joystick').addEventListener('touchmove', (e) => {
     const touch = e.touches[0];
-    const dx = touch.clientX - (rect.left + rect.width/2);
-    const dy = touch.clientY - (rect.top + rect.height/2);
-    const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 50);
-    const angle = Math.atan2(dy, dx);
-    
-    knob.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
-    moveForward = -Math.sin(angle) * (dist/50);
-    moveSide = Math.cos(angle) * (dist/50);
+    const rect = e.target.getBoundingClientRect();
+    joystickDir.x = (touch.clientX - (rect.left + 35)) / 35;
+    joystickDir.y = (touch.clientY - (rect.top + 35)) / 35;
 });
-container.addEventListener('touchend', () => {
-    knob.style.transform = `translate(0,0)`;
-    moveForward = 0; moveSide = 0;
+document.getElementById('joystick').addEventListener('touchend', () => {
+    joystickDir = { x: 0, y: 0 };
 });
 
-// Tourner l'écran (Caméra)
-let lastTouchX = 0, lastTouchY = 0;
-window.addEventListener('touchmove', (e) => {
-    if (e.target.tagName === 'CANVAS') {
-        const touch = e.touches[0];
-        if (lastTouchX !== 0) {
-            cameraAngleY -= (touch.clientX - lastTouchX) * 0.005;
-            cameraAngleX -= (touch.clientY - lastTouchY) * 0.005;
-            cameraAngleX = Math.max(-0.5, Math.min(0.5, cameraAngleX)); // Limite haut/bas
-        }
-        lastTouchX = touch.clientX;
-        lastTouchY = touch.clientY;
-    }
-}, {passive: false});
-window.addEventListener('touchend', () => { lastTouchX = 0; });
-
-// Saut
-document.getElementById('jump-btn').addEventListener('touchstart', () => {
-    if (isGrounded) { playerYVel = 0.15; isGrounded = false; }
-});
-
-// --- BOUCLE DE JEU ---
-function animate() {
-    requestAnimationFrame(animate);
-
-    // Gravité
-    playerGroup.position.y += playerYVel;
-    if (playerGroup.position.y > 0.75) {
-        playerYVel -= 0.008;
-        isGrounded = false;
-    } else {
-        playerGroup.position.y = 0.75;
-        playerYVel = 0;
-        isGrounded = true;
+// --- BOUCLE DE MISE À JOUR ---
+Matter.Events.on(engine, 'beforeUpdate', () => {
+    // Gravité allégée pour la voiture quand elle vole
+    if (Math.abs(joystickDir.y) > 0.1 || isBoosting) {
+        Body.applyForce(car, car.position, { x: 0, y: -0.0015 });
     }
 
-    // Déplacement relatif à la caméra
-    playerGroup.rotation.y = cameraAngleY;
-    playerGroup.translateZ(moveForward * 0.1);
-    playerGroup.translateX(moveSide * 0.1);
+    // Direction (Joystick)
+    if (Math.abs(joystickDir.x) > 0.1) {
+        Body.setVelocity(car, { x: joystickDir.x * 5, y: car.velocity.y });
+    }
 
-    // Caméra suit le joueur
-    const camDist = 5;
-    camera.position.x = playerGroup.position.x - Math.sin(cameraAngleY) * camDist;
-    camera.position.z = playerGroup.position.z - Math.cos(cameraAngleY) * camDist;
-    camera.position.y = playerGroup.position.y + 2 + (cameraAngleX * 5);
-    camera.lookAt(playerGroup.position);
+    // Boost
+    if (isBoosting) {
+        const angle = car.angle;
+        Body.applyForce(car, car.position, { 
+            x: Math.cos(angle) * 0.02, 
+            y: Math.sin(angle) * 0.02 
+        });
+    }
 
-    renderer.render(scene, camera);
-}
+    // Garder la voiture droite (auto-redressement)
+    Body.setAngle(car, car.angle * 0.95);
+});
 
+Render.run(render);
+const runner = Runner.create();
+Runner.run(runner, engine);
+
+// Redimensionnement
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    render.canvas.width = window.innerWidth;
+    render.canvas.height = window.innerHeight;
 });
-
-animate();
 </script>
 </body>
 </html>
