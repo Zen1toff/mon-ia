@@ -2,112 +2,45 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI_EDIT_GENERATOR // TIKTOK_SYNC</title>
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEURAL STRIKE | Browser Battle Royale</title>
     <style>
-        :root { --neon: #ff0055; --bg: #050505; }
-        body { background: var(--bg); color: white; font-family: 'Courier New', monospace; text-align: center; padding: 20px; }
-        
-        .container { max-width: 500px; margin: 0 auto; border: 2px solid var(--neon); padding: 20px; background: rgba(255,0,85,0.05); }
-        .file-input { margin: 20px 0; border: 1px dashed var(--neon); padding: 20px; cursor: pointer; display: block; }
-        
-        button { background: var(--neon); color: white; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; width: 100%; text-transform: uppercase; }
-        button:disabled { background: #333; cursor: not-allowed; }
-
-        #status { margin-top: 20px; font-size: 12px; color: #00ff41; }
-        #output-video { width: 100%; margin-top: 20px; display: none; border: 2px solid #fff; }
-        
-        .progress-bar { height: 5px; background: #222; margin-top: 10px; overflow: hidden; }
-        #progress-fill { height: 100%; background: var(--neon); width: 0%; transition: 0.3s; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; 
+            width: 20px; height: 20px; border: 2px solid rgba(0,255,0,0.5);
+            transform: translate(-50%, -50%); border-radius: 50%;
+        }
+        #mini-map { position: absolute; bottom: 20px; left: 20px; width: 150px; height: 150px; background: rgba(0,0,0,0.7); border: 1px solid #0f0; }
+        .joystick { position: absolute; bottom: 50px; right: 50px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%; display: none; }
+        /* Affiche le joystick uniquement sur mobile */
+        @media (pointer: coarse) { .joystick { display: block; pointer-events: auto; } }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1 style="color: var(--neon);">AUTO_EDIT_AI v1</h1>
-    <p style="font-size: 10px;">SYNC VIDEO CUTS TO BEAT AUTOMATICALLY</p>
+    <canvas id="game-canvas"></canvas>
 
-    <div class="file-input">
-        <label>1. CHOISIR MUSIQUE (MP3)</label>
-        <input type="file" id="audio-file" accept="audio/*">
+    <div id="ui-layer">
+        <div id="crosshair"></div>
+        <div id="mini-map"></div>
+        
+        <div style="position: absolute; top: 20px; right: 20px; color: #0f0;">
+            JOUEURS EN VIE : <span id="alive-count">100</span>
+        </div>
+
+        <div id="move-joystick" class="joystick"></div>
     </div>
 
-    <div class="file-input">
-        <label>2. CHOISIR RUSH VIDEO (MP4)</label>
-        <input type="file" id="video-file" accept="video/*">
-    </div>
-
-    <button id="render-btn" onclick="processEdit()">GÉNÉRER L'EDIT TIKTOK</button>
-
-    <div class="progress-bar"><div id="progress-fill"></div></div>
-    <div id="status">SYSTÈME EN ATTENTE...</div>
-
-    <video id="output-video" controls></video>
-</div>
-
-<script>
-    const { createFFmpeg, fetchFile } = FFmpeg;
-    const ffmpeg = createFFmpeg({ log: true });
-
-    async function processEdit() {
-        const audioInput = document.getElementById('audio-file').files[0];
-        const videoInput = document.getElementById('video-file').files[0];
-        const status = document.getElementById('status');
-        const btn = document.getElementById('render-btn');
-        const progress = document.getElementById('progress-fill');
-
-        if (!audioInput || !videoInput) return alert("Veuillez charger les deux fichiers !");
-
-        btn.disabled = true;
-        status.innerText = "> INITIALISATION DU MOTEUR DE RENDU...";
-        
-        if (!ffmpeg.isLoaded()) await ffmpeg.load();
-        progress.style.width = "20%";
-
-        status.innerText = "> ANALYSE DU RYTHME ET IMPORTATION...";
-        ffmpeg.FS('writeFile', 'audio.mp3', await fetchFile(audioInput));
-        ffmpeg.FS('writeFile', 'video.mp4', await fetchFile(videoInput));
-        progress.style.width = "40%";
-
-        status.innerText = "> MONTAGE IA EN COURS (SYNC BEAT)...";
-
-        /* LOGIQUE DE L'EDIT :
-           1. On force le format 9:16 (Vertical TikTok).
-           2. On prend 15 secondes de la vidéo.
-           3. On ajoute un filtre de contraste élevé pour le look "Spider-Man Edit".
-           4. On remplace l'audio original par ton fichier MP3.
-        */
-        
-        try {
-            await ffmpeg.run(
-                '-i', 'video.mp4',
-                '-i', 'audio.mp3',
-                '-t', '15', // On limite à 15 secondes
-                '-vf', 'crop=ih*(9/16):ih, eq=contrast=1.4:brightness=0.02, unsharp=5:5:1.0:5:5:0.0', // TikTok Crop + Color Grade
-                '-map', '0:v:0', // Prendre la vidéo du fichier 1
-                '-map', '1:a:0', // Prendre l'audio du fichier 2
-                '-shortest', // S'arrêter quand le plus court finit
-                '-c:v', 'libx264', '-preset', 'ultrafast',
-                'edit_final.mp4'
-            );
-
-            progress.style.width = "100%";
-            status.innerText = "> EDIT TERMINÉ ! GÉNÉRATION DU FICHIER...";
-
-            const data = ffmpeg.FS('readFile', 'edit_final.mp4');
-            const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-            
-            const out = document.getElementById('output-video');
-            out.src = videoUrl;
-            out.style.display = "block";
-            btn.disabled = false;
-        } catch (e) {
-            status.innerText = "> ERREUR DE RENDU : " + e.message;
-            btn.disabled = false;
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
         }
-    }
-</script>
-
+    </script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>
