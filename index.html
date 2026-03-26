@@ -3,27 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WARZONE WEB | Combat System</title>
+    <title>WEB ROYALE | Warzone x Fortnite</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: sans-serif; }
-        #crosshair {
-            position: absolute; top: 50%; left: 50%;
-            width: 12px; height: 12px; border: 2px solid rgba(0, 255, 0, 0.7);
-            transform: translate(-50%, -50%); pointer-events: none;
-        }
-        #instructions {
-            position: absolute; top: 20px; left: 20px;
-            background: rgba(0,0,0,0.8); padding: 15px; border: 1px solid #0f0; font-size: 14px;
-        }
+        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: 'Arial', sans-serif; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #0f0; transform: translate(-50%, -50%); pointer-events: none; border-radius: 50%; }
+        
+        /* HUD */
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #killfeed { position: absolute; top: 20px; right: 20px; text-align: right; color: #ffaa00; font-weight: bold; }
+        #health-bar { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 300px; height: 20px; background: rgba(0,0,0,0.5); border: 2px solid white; }
+        #health-inner { width: 100%; height: 100%; background: #00ff00; transition: width 0.3s; }
+        #timer { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 24px; color: yellow; }
+        
+        /* Chiffres de dégâts */
+        .damage-popup { position: absolute; color: #ffff00; font-weight: bold; font-size: 20px; pointer-events: none; animation: floatUp 0.8s ease-out forwards; }
+        @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-50px); opacity: 0; } }
     </style>
 </head>
 <body>
 
     <div id="crosshair"></div>
-    <div id="instructions">
-        <b>CLIC GAUCHE</b> : Tirer | <b>Z-Q-S-D</b> : Bouger<br>
-        <b>SHIFT + CTRL</b> : Tactical Slide<br>
-        <i>Cliquez pour activer le verrouillage souris</i>
+    <div id="hud">
+        <div id="timer">LOBBY : 10s</div>
+        <div id="killfeed"></div>
+        <div id="health-bar"><div id="health-inner"></div></div>
     </div>
 
     <script type="importmap">
@@ -34,91 +37,120 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
 
-        // --- INITIALISATION ---
+        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111);
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        scene.background = new THREE.Color(0x87ceeb);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(100, 100, 50);
         scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
 
-        // --- OBJETS TRACTABLES (MURS) ---
-        const shootableObjects = [];
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+        // --- GAME VARIABLES ---
+        let gameState = "LOBBY"; // LOBBY, BUS, DROPPING, PLAYING
+        let health = 100;
+        let zoneRadius = 500;
+        let lobbyTimer = 10;
+        const enemies = [];
+        const clock = new THREE.Clock();
+
+        // --- WORLD ---
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({ color: 0x4a7c44 }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
-        shootableObjects.push(floor);
 
-        for(let i=0; i<30; i++) {
-            const box = new THREE.Mesh(new THREE.BoxGeometry(5, 8, 5), new THREE.MeshStandardMaterial({color: 0x555555}));
-            box.position.set(Math.random()*150-75, 4, Math.random()*150-75);
-            scene.add(box);
-            shootableObjects.push(box);
+        // La Zone (Cercle visuel)
+        const zoneGeo = new THREE.TorusGeometry(zoneRadius, 2, 16, 100);
+        const zoneMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+        const zoneCircle = new THREE.Mesh(zoneGeo, zoneMat);
+        zoneCircle.rotation.x = Math.PI / 2;
+        scene.add(zoneCircle);
+
+        // Ennemis (Cubes rouges)
+        for(let i=0; i<20; i++) {
+            const enemy = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), new THREE.MeshStandardMaterial({color: 0xff0000}));
+            enemy.position.set(Math.random()*400-200, 2, Math.random()*400-200);
+            enemy.userData = { hp: 100 };
+            scene.add(enemy);
+            enemies.push(enemy);
         }
 
-        // --- ARME ---
-        const gunGroup = new THREE.Group();
-        const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.25, 0.8), new THREE.MeshStandardMaterial({color: 0x050505}));
-        gunGroup.add(gunBody);
-        gunGroup.position.set(0.4, -0.4, -0.6);
-        camera.add(gunGroup);
+        // --- PLAYER & ARME ---
+        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.7), new THREE.MeshStandardMaterial({color: 0x222222}));
+        gun.position.set(0.3, -0.3, -0.5);
+        camera.add(gun);
         scene.add(camera);
 
-        // --- CONTROLES ---
         const controls = new PointerLockControls(camera, document.body);
         document.addEventListener('click', () => controls.lock());
 
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let isSprinting = false, isCrouching = false, isSliding = false;
-        let slideTimer = 0, velocity = new THREE.Vector3(), direction = new THREE.Vector3();
-
-        // --- SYSTEME DE TIR (RAYCASTING) ---
+        // --- LOGIQUE DE TIR ET DEGATS ---
         const raycaster = new THREE.Raycaster();
-        
         function shoot() {
-            if (!controls.isLocked) return;
+            if(!controls.isLocked) return;
 
-            // Recul visuel de l'arme
-            gunGroup.position.z += 0.1;
-            camera.rotation.x += 0.02; // Recul caméra
+            // Recul visuel corrigé (on ne modifie pas camera.rotation.x directement pour éviter le tilt permanent)
+            gun.position.z += 0.15; 
 
-            // Detection d'impact
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-            const intersects = raycaster.intersectObjects(shootableObjects);
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+            const intersects = raycaster.intersectObjects(enemies);
 
-            if (intersects.length > 0) {
-                const hit = intersects[0];
-                createImpact(hit.point, hit.face.normal);
+            if(intersects.length > 0) {
+                const target = intersects[0].object;
+                const dmg = Math.floor(Math.random() * 20) + 15;
+                
+                showDamage(dmg);
+                
+                if(gameState !== "LOBBY") {
+                    target.userData.hp -= dmg;
+                    if(target.userData.hp <= 0) {
+                        addToKillfeed("VOUS avez éliminé un bot");
+                        target.position.y = -10; // "Mort"
+                    }
+                }
             }
         }
 
-        function createImpact(point, normal) {
-            const impactGeo = new THREE.PlaneGeometry(0.1, 0.1);
-            const impactMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
-            const impact = new THREE.Mesh(impactGeo, impactMat);
-            
-            impact.position.copy(point).add(normal.multiplyScalar(0.01));
-            impact.lookAt(point.clone().add(normal));
-            scene.add(impact);
-
-            // Auto-destruction de l'impact après 5s pour perf
-            setTimeout(() => scene.remove(impact), 5000);
+        function showDamage(amount) {
+            const div = document.createElement('div');
+            div.className = 'damage-popup';
+            div.innerText = amount;
+            div.style.left = (window.innerWidth / 2 + (Math.random()*40-20)) + 'px';
+            div.style.top = (window.innerHeight / 2 - (Math.random()*40-20)) + 'px';
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 800);
         }
 
-        // --- EVENTS ---
-        document.addEventListener('mousedown', (e) => { if(e.button === 0) shoot(); });
+        function addToKillfeed(msg) {
+            const feed = document.getElementById('killfeed');
+            const line = document.createElement('div');
+            line.innerText = msg;
+            feed.appendChild(line);
+            setTimeout(() => line.remove(), 3000);
+        }
+
+        // --- SYSTEME DE BOUCLE ---
+        let velocity = new THREE.Vector3();
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let isSprinting = false, isCrouching = false, isSliding = false, slideTimer = 0;
+
         document.addEventListener('keydown', (e) => {
             if(e.code === 'KeyW') moveForward = true;
             if(e.code === 'KeyS') moveBackward = true;
             if(e.code === 'KeyA') moveLeft = true;
             if(e.code === 'KeyD') moveRight = true;
             if(e.code === 'ShiftLeft') isSprinting = true;
-            if(e.code === 'ControlLeft') { if(isSprinting && moveForward) { isSliding = true; slideTimer = 35; } isCrouching = true; }
-            if(e.code === 'Space' && camera.position.y <= 1.75) velocity.y += 12;
+            if(e.code === 'Space') {
+                if(gameState === "BUS") { gameState = "DROPPING"; addToKillfeed("VOUS avez sauté !"); }
+                else if(camera.position.y <= 1.8) velocity.y += 10;
+            }
+            if(e.code === 'ControlLeft') { if(isSprinting && moveForward) { isSliding = true; slideTimer = 30; } isCrouching = true; }
         });
+
         document.addEventListener('keyup', (e) => {
             if(e.code === 'KeyW') moveForward = false;
             if(e.code === 'KeyS') moveBackward = false;
@@ -128,49 +160,75 @@
             if(e.code === 'ControlLeft') { isCrouching = false; isSliding = false; }
         });
 
-        // --- BOUCLE PRINCIPALE ---
-        let prevTime = performance.now();
-        function animate() {
-            requestAnimationFrame(animate);
-            const time = performance.now();
-            const delta = (time - prevTime) / 1000;
+        document.addEventListener('mousedown', () => shoot());
 
-            if (controls.isLocked) {
-                // Frottements & Gravité
-                velocity.x -= velocity.x * 10.0 * delta;
-                velocity.z -= velocity.z * 10.0 * delta;
-                velocity.y -= 9.8 * 4.0 * delta;
-
-                direction.z = Number(moveForward) - Number(moveBackward);
-                direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize();
-
-                let speed = isSprinting ? 90 : (isCrouching ? 25 : 45);
-                if (isSliding) { speed = 140 * (slideTimer/35); slideTimer--; if(slideTimer <= 0) isSliding = false; }
-
-                if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
-                if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
-
-                controls.moveRight(-velocity.x * delta);
-                controls.moveForward(-velocity.z * delta);
-
-                // Hauteur (Crouch transition)
-                let targetH = isCrouching ? 0.9 : 1.7;
-                camera.position.y += (targetH - camera.position.y) * 0.15;
-                camera.position.y += (velocity.y * delta);
-
-                if (camera.position.y < targetH) { velocity.y = 0; camera.position.y = targetH; }
-
-                // Retour de l'arme après recul
-                gunGroup.position.z += (-0.6 - gunGroup.position.z) * 0.1;
-                
-                // Animation de marche (Bobbing)
-                if((moveForward || moveLeft || moveRight) && !isSliding) {
-                    gunGroup.position.y = -0.4 + Math.sin(time * 0.01) * 0.01;
+        setInterval(() => {
+            if(gameState === "LOBBY") {
+                lobbyTimer--;
+                document.getElementById('timer').innerText = `LOBBY : ${lobbyTimer}s`;
+                if(lobbyTimer <= 0) {
+                    gameState = "BUS";
+                    camera.position.set(0, 300, 800);
+                    document.getElementById('timer').innerText = "DANS LE BUS - ESPACE POUR SAUTER";
                 }
             }
+        }, 1000);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            if(controls.isLocked) {
+                if(gameState === "BUS") {
+                    camera.position.z -= 50 * delta;
+                } 
+                else if(gameState === "DROPPING") {
+                    camera.position.y -= 40 * delta;
+                    camera.position.z -= 10 * delta;
+                    if(camera.position.y <= 1.7) { gameState = "PLAYING"; document.getElementById('timer').innerText = "ZONE ARRIVE !"; }
+                }
+                else {
+                    // Mouvements standards
+                    velocity.x -= velocity.x * 10.0 * delta;
+                    velocity.z -= velocity.z * 10.0 * delta;
+                    velocity.y -= 9.8 * 3.0 * delta;
+
+                    let speed = isSprinting ? 100 : (isCrouching ? 30 : 50);
+                    if(isSliding) { speed = 150 * (slideTimer/30); slideTimer--; if(slideTimer <= 0) isSliding = false; }
+
+                    let dirZ = Number(moveForward) - Number(moveBackward);
+                    let dirX = Number(moveRight) - Number(moveLeft);
+                    
+                    if(moveForward || moveBackward) velocity.z -= dirZ * speed * delta;
+                    if(moveLeft || moveRight) velocity.x -= dirX * speed * delta;
+
+                    controls.moveRight(-velocity.x * delta);
+                    controls.moveForward(-velocity.z * delta);
+                    camera.position.y += (velocity.y * delta);
+
+                    let floorH = isCrouching ? 0.8 : 1.7;
+                    if(camera.position.y < floorH) { velocity.y = 0; camera.position.y = floorH; }
+
+                    // La Zone rétrécit
+                    if(gameState === "PLAYING") {
+                        zoneRadius -= 0.5 * delta;
+                        zoneCircle.scale.set(zoneRadius/500, zoneRadius/500, 1);
+                        
+                        // Check dégâts de zone
+                        let dist = Math.sqrt(camera.position.x**2 + camera.position.z**2);
+                        if(dist > zoneRadius) {
+                            health -= 5 * delta;
+                            document.getElementById('health-inner').style.width = health + "%";
+                            if(health <= 0) location.reload(); // Game Over
+                        }
+                    }
+                }
+                
+                // Correction Recul arme
+                gun.position.z += (-0.5 - gun.position.z) * 0.1;
+            }
+
             renderer.render(scene, camera);
-            prevTime = time;
         }
         animate();
     </script>
