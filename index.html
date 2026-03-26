@@ -3,44 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEURAL STRIKE | Browser Battle Royale</title>
+    <title>NEURAL STRIKE | Web Battle Royale</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        #crosshair { 
-            position: absolute; top: 50%; left: 50%; 
-            width: 20px; height: 20px; border: 2px solid rgba(0,255,0,0.5);
-            transform: translate(-50%, -50%); border-radius: 50%;
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; }
+        
+        /* Interface Utilisateur (HUD) */
+        #hud {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; color: white; text-shadow: 2px 2px 4px #000;
         }
-        #mini-map { position: absolute; bottom: 20px; left: 20px; width: 150px; height: 150px; background: rgba(0,0,0,0.7); border: 1px solid #0f0; }
-        .joystick { position: absolute; bottom: 50px; right: 50px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%; display: none; }
-        /* Affiche le joystick uniquement sur mobile */
-        @media (pointer: coarse) { .joystick { display: block; pointer-events: auto; } }
+        #ui-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; font-size: 2rem; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px;
+        }
+        #altimetre { position: absolute; right: 20px; top: 50%; font-size: 1.5rem; color: #0f0; }
+        #status { position: absolute; bottom: 30px; width: 100%; text-align: center; font-weight: bold; }
+        
+        /* Bouton de saut pour Mobile */
+        #jump-btn {
+            position: absolute; bottom: 50px; right: 50px; width: 80px; height: 80px;
+            background: rgba(255,255,255,0.2); border: 2px solid white; border-radius: 50%;
+            pointer-events: auto; display: none; align-items: center; justify-content: center;
+        }
+        @media (pointer: coarse) { #jump-btn { display: flex; } }
     </style>
 </head>
 <body>
 
-    <canvas id="game-canvas"></canvas>
-
-    <div id="ui-layer">
-        <div id="crosshair"></div>
-        <div id="mini-map"></div>
-        
-        <div style="position: absolute; top: 20px; right: 20px; color: #0f0;">
-            JOUEURS EN VIE : <span id="alive-count">100</span>
-        </div>
-
-        <div id="move-joystick" class="joystick"></div>
+    <div id="hud">
+        <div id="ui-overlay">CHARGEMENT...</div>
+        <div id="altimetre">ALT: 0m</div>
+        <div id="status">EN ATTENTE DE JOUEURS</div>
+        <div id="jump-btn">SAUTER</div>
     </div>
 
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
             }
         }
     </script>
-    <script type="module" src="main.js"></script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- CONFIGURATION DE BASE ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // Ciel bleu
+        scene.fog = new THREE.Fog(0x87ceeb, 100, 1000);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Lumières
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 10, 7.5);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
+
+        // --- DÉCOR (MAP TEMPORAIRE) ---
+        const floorGeo = new THREE.PlaneGeometry(2000, 2000);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x348C31 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+
+        // Ajouter des "bâtiments" simples pour la sensation de vitesse
+        for(let i=0; i<100; i++) {
+            const bGeo = new THREE.BoxGeometry(10, Math.random()*50, 10);
+            const bMat = new THREE.MeshStandardMaterial({color: 0x808080});
+            const b = new THREE.Mesh(bGeo, bMat);
+            b.position.set(Math.random()*1000 - 500, 0, Math.random()*1000 - 500);
+            scene.add(b);
+        }
+
+        // --- LOGIQUE DU JEU ---
+        let gameState = "LOBBY"; 
+        let timer = 10;
+        let velocityY = 0;
+        let parachuteOuvert = false;
+        
+        const ui = document.getElementById('ui-overlay');
+        const altDisplay = document.getElementById('altimetre');
+        const status = document.getElementById('status');
+
+        // Initialisation Caméra (Lobby)
+        camera.position.set(0, 1.6, 10);
+
+        // Compteur de lancement
+        const interval = setInterval(() => {
+            timer--;
+            ui.innerText = `LANCEMENT : ${timer}s`;
+            if(timer <= 0) {
+                clearInterval(interval);
+                startFlight();
+            }
+        }, 1000);
+
+        function startFlight() {
+            gameState = "PLANE";
+            ui.innerText = "DANS L'AVION";
+            status.innerText = "APPUYEZ SUR [ESPACE] OU LE BOUTON POUR SAUTER";
+            camera.position.set(0, 600, 500); // Très haut
+        }
+
+        function jump() {
+            if(gameState === "PLANE") {
+                gameState = "DROPPING";
+                ui.innerText = "CHUTE LIBRE";
+                status.innerText = "ESPACE : OUVRIR PARACHUTE";
+            } else if(gameState === "DROPPING") {
+                parachuteOuvert = !parachuteOuvert;
+                ui.innerText = parachuteOuvert ? "PARACHUTE OUVERT" : "CHUTE LIBRE";
+            }
+        }
+
+        // --- CONTRÔLES ---
+        window.addEventListener('keydown', (e) => { if(e.code === 'Space') jump(); });
+        document.getElementById('jump-btn').addEventListener('click', jump);
+
+        // --- BOUCLE D'ANIMATION ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (gameState === "PLANE") {
+                camera.position.z -= 1.5; // L'avion avance
+                camera.lookAt(0, 0, -1000);
+            }
+
+            if (gameState === "DROPPING") {
+                let gravity = parachuteOuvert ? -0.1 : -0.8;
+                velocityY = gravity; 
+                camera.position.y += velocityY;
+                camera.position.z -= 0.5; // Inertie vers l'avant
+                
+                // Rotation légère pour l'effet de chute
+                camera.rotation.x = -Math.PI / 4; 
+            }
+
+            if (gameState === "DROPPING" && camera.position.y <= 1.6) {
+                camera.position.y = 1.6;
+                gameState = "GROUND";
+                ui.style.display = "none";
+                status.innerText = "COMBAT COMMENCÉ !";
+                camera.rotation.x = 0;
+            }
+
+            // Mise à jour de l'affichage
+            altDisplay.innerText = `ALT: ${Math.round(camera.position.y)}m`;
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
 </body>
 </html>
