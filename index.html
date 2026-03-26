@@ -2,169 +2,173 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEURAL STRIKE | Web Battle Royale</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WARZONE WEB | Tactical Engine</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: sans-serif; }
         canvas { display: block; }
-        
-        /* Interface Utilisateur (HUD) */
-        #hud {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; color: white; text-shadow: 2px 2px 4px #000;
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.8);
+            transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
         }
-        #ui-overlay {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; font-size: 2rem; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px;
+        #instructions {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(0,0,0,0.7); padding: 15px; border: 1px solid #555;
         }
-        #altimetre { position: absolute; right: 20px; top: 50%; font-size: 1.5rem; color: #0f0; }
-        #status { position: absolute; bottom: 30px; width: 100%; text-align: center; font-weight: bold; }
-        
-        /* Bouton de saut pour Mobile */
-        #jump-btn {
-            position: absolute; bottom: 50px; right: 50px; width: 80px; height: 80px;
-            background: rgba(255,255,255,0.2); border: 2px solid white; border-radius: 50%;
-            pointer-events: auto; display: none; align-items: center; justify-content: center;
-        }
-        @media (pointer: coarse) { #jump-btn { display: flex; } }
     </style>
 </head>
 <body>
 
-    <div id="hud">
-        <div id="ui-overlay">CHARGEMENT...</div>
-        <div id="altimetre">ALT: 0m</div>
-        <div id="status">EN ATTENTE DE JOUEURS</div>
-        <div id="jump-btn">SAUTER</div>
+    <div id="crosshair"></div>
+    <div id="instructions">
+        <b>Z-Q-S-D</b> : Bouger | <b>SHIFT</b> : Courir | <b>ESPACE</b> : Sauter<br>
+        <b>CTRL</b> : S'accroupir | <b>SHIFT + CTRL</b> : SLIDE (Glissade)<br>
+        <i>Cliquez n'importe où pour bloquer la souris</i>
     </div>
 
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-            }
-        }
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
     </script>
 
     <script type="module">
         import * as THREE from 'three';
+        import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
 
-        // --- CONFIGURATION DE BASE ---
+        // --- SETUP SCENE ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb); // Ciel bleu
-        scene.fog = new THREE.Fog(0x87ceeb, 100, 1000);
+        scene.background = new THREE.Color(0x222222);
+        scene.fog = new THREE.Fog(0x222222, 10, 100);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // Lumières
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 10, 7.5);
+        const light = new THREE.HemisphereLight(0xeeeeff, 0x444422, 1.5);
         scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040));
 
-        // --- DÉCOR (MAP TEMPORAIRE) ---
-        const floorGeo = new THREE.PlaneGeometry(2000, 2000);
-        const floorMat = new THREE.MeshStandardMaterial({ color: 0x348C31 });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
+        // --- MAP (Sol + Obstacles) ---
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(500, 500),
+            new THREE.MeshStandardMaterial({ color: 0x444444 })
+        );
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // Ajouter des "bâtiments" simples pour la sensation de vitesse
-        for(let i=0; i<100; i++) {
-            const bGeo = new THREE.BoxGeometry(10, Math.random()*50, 10);
-            const bMat = new THREE.MeshStandardMaterial({color: 0x808080});
-            const b = new THREE.Mesh(bGeo, bMat);
-            b.position.set(Math.random()*1000 - 500, 0, Math.random()*1000 - 500);
-            scene.add(b);
+        for(let i=0; i<50; i++) {
+            const box = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), new THREE.MeshStandardMaterial({color: 0x888888}));
+            box.position.set(Math.random()*200-100, 2, Math.random()*200-100);
+            scene.add(box);
         }
 
-        // --- LOGIQUE DU JEU ---
-        let gameState = "LOBBY"; 
-        let timer = 10;
-        let velocityY = 0;
-        let parachuteOuvert = false;
-        
-        const ui = document.getElementById('ui-overlay');
-        const altDisplay = document.getElementById('altimetre');
-        const status = document.getElementById('status');
+        // --- ARME (Vue FPS) ---
+        const gun = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 1), new THREE.MeshStandardMaterial({color: 0x111111}));
+        gun.add(body);
+        gun.position.set(0.5, -0.4, -0.8);
+        camera.add(gun); // L'arme est attachée à la caméra
+        scene.add(camera);
 
-        // Initialisation Caméra (Lobby)
-        camera.position.set(0, 1.6, 10);
+        // --- CONTROLES & MOUVEMENTS ---
+        const controls = new PointerLockControls(camera, document.body);
+        document.addEventListener('click', () => controls.lock());
 
-        // Compteur de lancement
-        const interval = setInterval(() => {
-            timer--;
-            ui.innerText = `LANCEMENT : ${timer}s`;
-            if(timer <= 0) {
-                clearInterval(interval);
-                startFlight();
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let isSprinting = false, isCrouching = false, isSliding = false;
+        let slideTimer = 0;
+        let velocity = new THREE.Vector3();
+        let direction = new THREE.Vector3();
+
+        const onKeyDown = (e) => {
+            switch (e.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'ShiftLeft': isSprinting = true; break;
+                case 'ControlLeft': 
+                    if (isSprinting && moveForward && !isCrouching) startSlide();
+                    isCrouching = true; 
+                    break;
+                case 'Space': if(camera.position.y <= 1.7) velocity.y += 15; break;
             }
-        }, 1000);
+        };
 
-        function startFlight() {
-            gameState = "PLANE";
-            ui.innerText = "DANS L'AVION";
-            status.innerText = "APPUYEZ SUR [ESPACE] OU LE BOUTON POUR SAUTER";
-            camera.position.set(0, 600, 500); // Très haut
-        }
-
-        function jump() {
-            if(gameState === "PLANE") {
-                gameState = "DROPPING";
-                ui.innerText = "CHUTE LIBRE";
-                status.innerText = "ESPACE : OUVRIR PARACHUTE";
-            } else if(gameState === "DROPPING") {
-                parachuteOuvert = !parachuteOuvert;
-                ui.innerText = parachuteOuvert ? "PARACHUTE OUVERT" : "CHUTE LIBRE";
+        const onKeyUp = (e) => {
+            switch (e.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyD': moveRight = false; break;
+                case 'ShiftLeft': isSprinting = false; break;
+                case 'ControlLeft': isCrouching = false; isSliding = false; break;
             }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        function startSlide() {
+            isSliding = true;
+            slideTimer = 40; // Durée du slide
         }
 
-        // --- CONTRÔLES ---
-        window.addEventListener('keydown', (e) => { if(e.code === 'Space') jump(); });
-        document.getElementById('jump-btn').addEventListener('click', jump);
-
-        // --- BOUCLE D'ANIMATION ---
+        // --- PHYSIQUE ---
+        let prevTime = performance.now();
         function animate() {
             requestAnimationFrame(animate);
 
-            if (gameState === "PLANE") {
-                camera.position.z -= 1.5; // L'avion avance
-                camera.lookAt(0, 0, -1000);
-            }
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
 
-            if (gameState === "DROPPING") {
-                let gravity = parachuteOuvert ? -0.1 : -0.8;
-                velocityY = gravity; 
-                camera.position.y += velocityY;
-                camera.position.z -= 0.5; // Inertie vers l'avant
-                
-                // Rotation légère pour l'effet de chute
-                camera.rotation.x = -Math.PI / 4; 
-            }
+            if (controls.isLocked) {
+                // Frottements (Air resistance)
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 6.0 * delta; // Gravité
 
-            if (gameState === "DROPPING" && camera.position.y <= 1.6) {
-                camera.position.y = 1.6;
-                gameState = "GROUND";
-                ui.style.display = "none";
-                status.innerText = "COMBAT COMMENCÉ !";
-                camera.rotation.x = 0;
-            }
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize();
 
-            // Mise à jour de l'affichage
-            altDisplay.innerText = `ALT: ${Math.round(camera.position.y)}m`;
+                // Calcul de la vitesse selon l'état
+                let speed = 40.0;
+                if (isSprinting) speed = 85.0;
+                if (isCrouching) speed = 20.0;
+                if (isSliding) {
+                    speed = 120.0 * (slideTimer / 40); // Décélération du slide
+                    slideTimer--;
+                    if(slideTimer <= 0) isSliding = false;
+                }
+
+                if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+
+                // Hauteur selon accroupissement
+                let targetHeight = isCrouching ? 1.0 : 1.7;
+                camera.position.y += (targetHeight - camera.position.y) * 0.2; 
+                camera.position.y += (velocity.y * delta); // Saut / Gravité
+
+                if (camera.position.y < targetHeight) {
+                    velocity.y = 0;
+                    camera.position.y = targetHeight;
+                }
+
+                // Animation de l'arme (Bobbing)
+                if (moveForward || moveBackward || moveLeft || moveRight) {
+                    let bSpeed = isSprinting ? 0.15 : 0.08;
+                    gun.position.y = -0.4 + Math.sin(time * 0.01) * 0.01;
+                    gun.position.x = 0.5 + Math.cos(time * 0.005) * 0.01;
+                }
+            }
 
             renderer.render(scene, camera);
+            prevTime = time;
         }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
 
         animate();
     </script>
