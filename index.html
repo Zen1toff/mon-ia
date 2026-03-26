@@ -2,129 +2,112 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Rocket Sideswipe Clone</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI_EDIT_GENERATOR // TIKTOK_SYNC</title>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #0f172a; touch-action: none; font-family: 'Arial', sans-serif; }
-        canvas { display: block; }
+        :root { --neon: #ff0055; --bg: #050505; }
+        body { background: var(--bg); color: white; font-family: 'Courier New', monospace; text-align: center; padding: 20px; }
         
-        #ui { position: absolute; top: 20px; width: 100%; display: flex; justify-content: center; gap: 40px; color: white; pointer-events: none; font-size: 24px; text-shadow: 2px 2px 4px #000; }
+        .container { max-width: 500px; margin: 0 auto; border: 2px solid var(--neon); padding: 20px; background: rgba(255,0,85,0.05); }
+        .file-input { margin: 20px 0; border: 1px dashed var(--neon); padding: 20px; cursor: pointer; display: block; }
         
-        /* Boutons style Sideswipe */
-        .ctrl-btn { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); color: white; display: flex; align-items: center; justify-content: center; user-select: none; }
-        #joy-zone { bottom: 40px; left: 40px; width: 120px; height: 120px; }
-        #jump-btn { bottom: 60px; right: 140px; width: 80px; height: 80px; }
-        #boost-btn { bottom: 40px; right: 40px; width: 90px; height: 90px; background: rgba(255, 100, 0, 0.2); }
+        button { background: var(--neon); color: white; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; width: 100%; text-transform: uppercase; }
+        button:disabled { background: #333; cursor: not-allowed; }
+
+        #status { margin-top: 20px; font-size: 12px; color: #00ff41; }
+        #output-video { width: 100%; margin-top: 20px; display: none; border: 2px solid #fff; }
+        
+        .progress-bar { height: 5px; background: #222; margin-top: 10px; overflow: hidden; }
+        #progress-fill { height: 100%; background: var(--neon); width: 0%; transition: 0.3s; }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    <div style="color: #00d2ff;">BLEU: <span id="score1">0</span></div>
-    <div style="color: #ff4d4d;">ROUGE: <span id="score2">0</span></div>
+<div class="container">
+    <h1 style="color: var(--neon);">AUTO_EDIT_AI v1</h1>
+    <p style="font-size: 10px;">SYNC VIDEO CUTS TO BEAT AUTOMATICALLY</p>
+
+    <div class="file-input">
+        <label>1. CHOISIR MUSIQUE (MP3)</label>
+        <input type="file" id="audio-file" accept="audio/*">
+    </div>
+
+    <div class="file-input">
+        <label>2. CHOISIR RUSH VIDEO (MP4)</label>
+        <input type="file" id="video-file" accept="video/*">
+    </div>
+
+    <button id="render-btn" onclick="processEdit()">GÉNÉRER L'EDIT TIKTOK</button>
+
+    <div class="progress-bar"><div id="progress-fill"></div></div>
+    <div id="status">SYSTÈME EN ATTENTE...</div>
+
+    <video id="output-video" controls></video>
 </div>
 
-<div id="joy-zone" class="ctrl-btn">DIR</div>
-<div id="jump-btn" class="ctrl-btn">SAUT</div>
-<div id="boost-btn" class="ctrl-btn">BOOST</div>
-
 <script>
-const { Engine, Render, Runner, Bodies, Composite, Body, Vector, Events } = Matter;
-const engine = Engine.create();
-const w = window.innerWidth;
-const h = window.innerHeight;
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
 
-const render = Render.create({
-    element: document.body,
-    engine: engine,
-    options: { width: w, height: h, wireframes: false, background: '#1e293b' }
-});
+    async function processEdit() {
+        const audioInput = document.getElementById('audio-file').files[0];
+        const videoInput = document.getElementById('video-file').files[0];
+        const status = document.getElementById('status');
+        const btn = document.getElementById('render-btn');
+        const progress = document.getElementById('progress-fill');
 
-// --- DÉCOR ET ARENE ---
-const ground = Bodies.rectangle(w/2, h - 20, w, 40, { isStatic: true, render: { fillStyle: '#334155' } });
-const wallL = Bodies.rectangle(10, h/2, 20, h, { isStatic: true });
-const wallR = Bodies.rectangle(w - 10, h/2, 20, h, { isStatic: true });
-const ceiling = Bodies.rectangle(w/2, 10, w, 20, { isStatic: true });
+        if (!audioInput || !videoInput) return alert("Veuillez charger les deux fichiers !");
 
-// Rampes incurvées (simplifiées par des blocs inclinés)
-const rampL = Bodies.rectangle(100, h-60, 250, 20, { isStatic: true, angle: -0.5, render: { fillStyle: '#334155' } });
-const rampR = Bodies.rectangle(w-100, h-60, 250, 20, { isStatic: true, angle: 0.5, render: { fillStyle: '#334155' } });
+        btn.disabled = true;
+        status.innerText = "> INITIALISATION DU MOTEUR DE RENDU...";
+        
+        if (!ffmpeg.isLoaded()) await ffmpeg.load();
+        progress.style.width = "20%";
 
-// Zones de But (en hauteur comme sur tes photos)
-const goal1 = Bodies.rectangle(30, h*0.4, 60, 150, { isSensor: true, isStatic: true, render: { fillStyle: 'rgba(0, 210, 255, 0.3)' } });
-const goal2 = Bodies.rectangle(w-30, h*0.4, 60, 150, { isSensor: true, isStatic: true, render: { fillStyle: 'rgba(255, 77, 77, 0.3)' } });
+        status.innerText = "> ANALYSE DU RYTHME ET IMPORTATION...";
+        ffmpeg.FS('writeFile', 'audio.mp3', await fetchFile(audioInput));
+        ffmpeg.FS('writeFile', 'video.mp4', await fetchFile(videoInput));
+        progress.style.width = "40%";
 
-// --- OBJETS ---
-const car = Bodies.rectangle(200, h-100, 70, 35, { 
-    restitution: 0.1, friction: 0.5, density: 0.002,
-    render: { fillStyle: '#00d2ff', sprite: { xScale: 0.5, yScale: 0.5 } } 
-});
+        status.innerText = "> MONTAGE IA EN COURS (SYNC BEAT)...";
 
-const ball = Bodies.circle(w/2, h/2, 35, { 
-    restitution: 0.9, friction: 0.01, density: 0.0005,
-    render: { fillStyle: '#fff', strokeStyle: '#ccc', lineWidth: 3 } 
-});
+        /* LOGIQUE DE L'EDIT :
+           1. On force le format 9:16 (Vertical TikTok).
+           2. On prend 15 secondes de la vidéo.
+           3. On ajoute un filtre de contraste élevé pour le look "Spider-Man Edit".
+           4. On remplace l'audio original par ton fichier MP3.
+        */
+        
+        try {
+            await ffmpeg.run(
+                '-i', 'video.mp4',
+                '-i', 'audio.mp3',
+                '-t', '15', // On limite à 15 secondes
+                '-vf', 'crop=ih*(9/16):ih, eq=contrast=1.4:brightness=0.02, unsharp=5:5:1.0:5:5:0.0', // TikTok Crop + Color Grade
+                '-map', '0:v:0', // Prendre la vidéo du fichier 1
+                '-map', '1:a:0', // Prendre l'audio du fichier 2
+                '-shortest', // S'arrêter quand le plus court finit
+                '-c:v', 'libx264', '-preset', 'ultrafast',
+                'edit_final.mp4'
+            );
 
-Composite.add(engine.world, [ground, wallL, wallR, ceiling, rampL, rampR, goal1, goal2, car, ball]);
+            progress.style.width = "100%";
+            status.innerText = "> EDIT TERMINÉ ! GÉNÉRATION DU FICHIER...";
 
-// --- LOGIQUE DE JEU ---
-let score1 = 0, score2 = 0;
-let isBoosting = false;
-let joystick = { x: 0, y: 0 };
-
-// Touches
-document.getElementById('boost-btn').addEventListener('touchstart', () => isBoosting = true);
-document.getElementById('boost-btn').addEventListener('touchend', () => isBoosting = false);
-
-document.getElementById('jump-btn').addEventListener('touchstart', () => {
-    Body.applyForce(car, car.position, { x: 0, y: -0.08 }); // Saut sec
-});
-
-document.getElementById('joy-zone').addEventListener('touchmove', (e) => {
-    const t = e.touches[0];
-    const r = e.target.getBoundingClientRect();
-    joystick.x = (t.clientX - (r.left + r.width/2)) / 50;
-    joystick.y = (t.clientY - (r.top + r.height/2)) / 50;
-});
-document.getElementById('joy-zone').addEventListener('touchend', () => joystick = { x: 0, y: 0 });
-
-// Boucle de mise à jour
-Events.on(engine, 'beforeUpdate', () => {
-    // Mouvement Horizontal
-    if (Math.abs(joystick.x) > 0.1) {
-        Body.setVelocity(car, { x: joystick.x * 6, y: car.velocity.y });
+            const data = ffmpeg.FS('readFile', 'edit_final.mp4');
+            const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+            
+            const out = document.getElementById('output-video');
+            out.src = videoUrl;
+            out.style.display = "block";
+            btn.disabled = false;
+        } catch (e) {
+            status.innerText = "> ERREUR DE RENDU : " + e.message;
+            btn.disabled = false;
+        }
     }
-
-    // Vol / Boost
-    if (isBoosting) {
-        const force = 0.004;
-        Body.applyForce(car, car.position, { 
-            x: Math.cos(car.angle) * force * (joystick.x || 1), 
-            y: Math.sin(car.angle) * force - 0.002 
-        });
-    }
-
-    // Redressement auto de la voiture
-    Body.setAngle(car, car.angle * 0.9);
-
-    // Détection des buts
-    if (ball.position.x < 60 && Math.abs(ball.position.y - h*0.4) < 75) resetBall(2);
-    if (ball.position.x > w-60 && Math.abs(ball.position.y - h*0.4) < 75) resetBall(1);
-});
-
-function resetBall(winner) {
-    if (winner === 1) score1++; else score2++;
-    document.getElementById('score1').innerText = score1;
-    document.getElementById('score2').innerText = score2;
-    
-    Body.setPosition(ball, { x: w/2, y: h/2 });
-    Body.setVelocity(ball, { x: 0, y: 0 });
-    Body.setPosition(car, { x: 200, y: h-100 });
-}
-
-Render.run(render);
-Runner.run(Runner.create(), engine);
 </script>
+
 </body>
 </html>
