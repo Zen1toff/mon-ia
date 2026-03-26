@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WARZONE WEB | Tactical Engine</title>
+    <title>WARZONE WEB | Combat System</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; color: white; font-family: sans-serif; }
-        canvas { display: block; }
         #crosshair {
             position: absolute; top: 50%; left: 50%;
-            width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.8);
-            transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
+            width: 12px; height: 12px; border: 2px solid rgba(0, 255, 0, 0.7);
+            transform: translate(-50%, -50%); pointer-events: none;
         }
         #instructions {
             position: absolute; top: 20px; left: 20px;
-            background: rgba(0,0,0,0.7); padding: 15px; border: 1px solid #555;
+            background: rgba(0,0,0,0.8); padding: 15px; border: 1px solid #0f0; font-size: 14px;
         }
     </style>
 </head>
@@ -22,9 +21,9 @@
 
     <div id="crosshair"></div>
     <div id="instructions">
-        <b>Z-Q-S-D</b> : Bouger | <b>SHIFT</b> : Courir | <b>ESPACE</b> : Sauter<br>
-        <b>CTRL</b> : S'accroupir | <b>SHIFT + CTRL</b> : SLIDE (Glissade)<br>
-        <i>Cliquez n'importe où pour bloquer la souris</i>
+        <b>CLIC GAUCHE</b> : Tirer | <b>Z-Q-S-D</b> : Bouger<br>
+        <b>SHIFT + CTRL</b> : Tactical Slide<br>
+        <i>Cliquez pour activer le verrouillage souris</i>
     </div>
 
     <script type="importmap">
@@ -35,112 +34,119 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
 
-        // --- SETUP SCENE ---
+        // --- INITIALISATION ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x222222);
-        scene.fog = new THREE.Fog(0x222222, 10, 100);
-
+        scene.background = new THREE.Color(0x111111);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const light = new THREE.HemisphereLight(0xeeeeff, 0x444422, 1.5);
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
         scene.add(light);
 
-        // --- MAP (Sol + Obstacles) ---
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(500, 500),
-            new THREE.MeshStandardMaterial({ color: 0x444444 })
-        );
+        // --- OBJETS TRACTABLES (MURS) ---
+        const shootableObjects = [];
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ color: 0x333333 }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
+        shootableObjects.push(floor);
 
-        for(let i=0; i<50; i++) {
-            const box = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), new THREE.MeshStandardMaterial({color: 0x888888}));
-            box.position.set(Math.random()*200-100, 2, Math.random()*200-100);
+        for(let i=0; i<30; i++) {
+            const box = new THREE.Mesh(new THREE.BoxGeometry(5, 8, 5), new THREE.MeshStandardMaterial({color: 0x555555}));
+            box.position.set(Math.random()*150-75, 4, Math.random()*150-75);
             scene.add(box);
+            shootableObjects.push(box);
         }
 
-        // --- ARME (Vue FPS) ---
-        const gun = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 1), new THREE.MeshStandardMaterial({color: 0x111111}));
-        gun.add(body);
-        gun.position.set(0.5, -0.4, -0.8);
-        camera.add(gun); // L'arme est attachée à la caméra
+        // --- ARME ---
+        const gunGroup = new THREE.Group();
+        const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.25, 0.8), new THREE.MeshStandardMaterial({color: 0x050505}));
+        gunGroup.add(gunBody);
+        gunGroup.position.set(0.4, -0.4, -0.6);
+        camera.add(gunGroup);
         scene.add(camera);
 
-        // --- CONTROLES & MOUVEMENTS ---
+        // --- CONTROLES ---
         const controls = new PointerLockControls(camera, document.body);
         document.addEventListener('click', () => controls.lock());
 
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let isSprinting = false, isCrouching = false, isSliding = false;
-        let slideTimer = 0;
-        let velocity = new THREE.Vector3();
-        let direction = new THREE.Vector3();
+        let slideTimer = 0, velocity = new THREE.Vector3(), direction = new THREE.Vector3();
 
-        const onKeyDown = (e) => {
-            switch (e.code) {
-                case 'KeyW': moveForward = true; break;
-                case 'KeyS': moveBackward = true; break;
-                case 'KeyA': moveLeft = true; break;
-                case 'KeyD': moveRight = true; break;
-                case 'ShiftLeft': isSprinting = true; break;
-                case 'ControlLeft': 
-                    if (isSprinting && moveForward && !isCrouching) startSlide();
-                    isCrouching = true; 
-                    break;
-                case 'Space': if(camera.position.y <= 1.7) velocity.y += 15; break;
+        // --- SYSTEME DE TIR (RAYCASTING) ---
+        const raycaster = new THREE.Raycaster();
+        
+        function shoot() {
+            if (!controls.isLocked) return;
+
+            // Recul visuel de l'arme
+            gunGroup.position.z += 0.1;
+            camera.rotation.x += 0.02; // Recul caméra
+
+            // Detection d'impact
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(shootableObjects);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                createImpact(hit.point, hit.face.normal);
             }
-        };
-
-        const onKeyUp = (e) => {
-            switch (e.code) {
-                case 'KeyW': moveForward = false; break;
-                case 'KeyS': moveBackward = false; break;
-                case 'KeyA': moveLeft = false; break;
-                case 'KeyD': moveRight = false; break;
-                case 'ShiftLeft': isSprinting = false; break;
-                case 'ControlLeft': isCrouching = false; isSliding = false; break;
-            }
-        };
-
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
-
-        function startSlide() {
-            isSliding = true;
-            slideTimer = 40; // Durée du slide
         }
 
-        // --- PHYSIQUE ---
+        function createImpact(point, normal) {
+            const impactGeo = new THREE.PlaneGeometry(0.1, 0.1);
+            const impactMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+            const impact = new THREE.Mesh(impactGeo, impactMat);
+            
+            impact.position.copy(point).add(normal.multiplyScalar(0.01));
+            impact.lookAt(point.clone().add(normal));
+            scene.add(impact);
+
+            // Auto-destruction de l'impact après 5s pour perf
+            setTimeout(() => scene.remove(impact), 5000);
+        }
+
+        // --- EVENTS ---
+        document.addEventListener('mousedown', (e) => { if(e.button === 0) shoot(); });
+        document.addEventListener('keydown', (e) => {
+            if(e.code === 'KeyW') moveForward = true;
+            if(e.code === 'KeyS') moveBackward = true;
+            if(e.code === 'KeyA') moveLeft = true;
+            if(e.code === 'KeyD') moveRight = true;
+            if(e.code === 'ShiftLeft') isSprinting = true;
+            if(e.code === 'ControlLeft') { if(isSprinting && moveForward) { isSliding = true; slideTimer = 35; } isCrouching = true; }
+            if(e.code === 'Space' && camera.position.y <= 1.75) velocity.y += 12;
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.code === 'KeyW') moveForward = false;
+            if(e.code === 'KeyS') moveBackward = false;
+            if(e.code === 'KeyA') moveLeft = false;
+            if(e.code === 'KeyD') moveRight = false;
+            if(e.code === 'ShiftLeft') isSprinting = false;
+            if(e.code === 'ControlLeft') { isCrouching = false; isSliding = false; }
+        });
+
+        // --- BOUCLE PRINCIPALE ---
         let prevTime = performance.now();
         function animate() {
             requestAnimationFrame(animate);
-
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
             if (controls.isLocked) {
-                // Frottements (Air resistance)
+                // Frottements & Gravité
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
-                velocity.y -= 9.8 * 6.0 * delta; // Gravité
+                velocity.y -= 9.8 * 4.0 * delta;
 
                 direction.z = Number(moveForward) - Number(moveBackward);
                 direction.x = Number(moveRight) - Number(moveLeft);
                 direction.normalize();
 
-                // Calcul de la vitesse selon l'état
-                let speed = 40.0;
-                if (isSprinting) speed = 85.0;
-                if (isCrouching) speed = 20.0;
-                if (isSliding) {
-                    speed = 120.0 * (slideTimer / 40); // Décélération du slide
-                    slideTimer--;
-                    if(slideTimer <= 0) isSliding = false;
-                }
+                let speed = isSprinting ? 90 : (isCrouching ? 25 : 45);
+                if (isSliding) { speed = 140 * (slideTimer/35); slideTimer--; if(slideTimer <= 0) isSliding = false; }
 
                 if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
                 if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
@@ -148,28 +154,24 @@
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
 
-                // Hauteur selon accroupissement
-                let targetHeight = isCrouching ? 1.0 : 1.7;
-                camera.position.y += (targetHeight - camera.position.y) * 0.2; 
-                camera.position.y += (velocity.y * delta); // Saut / Gravité
+                // Hauteur (Crouch transition)
+                let targetH = isCrouching ? 0.9 : 1.7;
+                camera.position.y += (targetH - camera.position.y) * 0.15;
+                camera.position.y += (velocity.y * delta);
 
-                if (camera.position.y < targetHeight) {
-                    velocity.y = 0;
-                    camera.position.y = targetHeight;
-                }
+                if (camera.position.y < targetH) { velocity.y = 0; camera.position.y = targetH; }
 
-                // Animation de l'arme (Bobbing)
-                if (moveForward || moveBackward || moveLeft || moveRight) {
-                    let bSpeed = isSprinting ? 0.15 : 0.08;
-                    gun.position.y = -0.4 + Math.sin(time * 0.01) * 0.01;
-                    gun.position.x = 0.5 + Math.cos(time * 0.005) * 0.01;
+                // Retour de l'arme après recul
+                gunGroup.position.z += (-0.6 - gunGroup.position.z) * 0.1;
+                
+                // Animation de marche (Bobbing)
+                if((moveForward || moveLeft || moveRight) && !isSliding) {
+                    gunGroup.position.y = -0.4 + Math.sin(time * 0.01) * 0.01;
                 }
             }
-
             renderer.render(scene, camera);
             prevTime = time;
         }
-
         animate();
     </script>
 </body>
