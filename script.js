@@ -1,54 +1,22 @@
-// SÉLECTEURS
-const searchBtn = document.querySelector('.search-icon');
-const searchOverlay = document.getElementById('search-overlay');
-const closeSearch = document.querySelector('.close-btn');
-const profileBtn = document.querySelector('.user-avatar');
-const profileModal = document.getElementById('profile-modal');
-const btnPlay = document.querySelector('.btn-primary');
-const videoPlayer = document.getElementById('video-player');
-const closePlayer = document.querySelector('.close-player');
-
-// 1. GESTION DE LA RECHERCHE
-searchBtn.onclick = () => {
-    searchOverlay.style.display = 'flex';
-    setTimeout(() => searchOverlay.style.opacity = '1', 10);
-    document.getElementById('search-input').focus();
+// Pour le profil
+document.querySelector('.user-avatar').onclick = function() {
+    document.getElementById('profile-modal').classList.toggle('active');
 };
 
-closeSearch.onclick = () => {
-    searchOverlay.style.opacity = '0';
-    setTimeout(() => searchOverlay.style.display = 'none', 500);
+// Pour la recherche
+document.querySelector('.search-icon').onclick = function() {
+    document.getElementById('search-overlay').classList.add('active');
 };
 
-// 2. GESTION DU PROFIL (Toggle)
-profileBtn.onclick = (e) => {
-    e.stopPropagation();
-    profileModal.style.display = (profileModal.style.display === 'block') ? 'none' : 'block';
+document.querySelector('.close-btn').onclick = function() {
+    document.getElementById('search-overlay').classList.remove('active');
 };
 
-// Fermer le profil si on clique ailleurs
-window.onclick = () => profileModal.style.display = 'none';
-
-// 3. BOUTON REGARDER (L'effet Whaou)
-btnPlay.onclick = () => {
-    videoPlayer.classList.add('active');
-    // On simule le lancement du film
-    // Ici, tu pourrais charger une autre vidéo ou passer en plein écran
+// Pour le bouton Regarder
+document.querySelector('.btn-primary').onclick = function() {
+    document.getElementById('video-player').classList.add('active');
 };
 
-closePlayer.onclick = () => {
-    videoPlayer.classList.remove('active');
+document.querySelector('.close-player').onclick = function() {
+    document.getElementById('video-player').classList.remove('active');
 };
-
-// 4. DÉFILEMENT AUTOMATIQUE DES FILMS (Optionnel)
-// Si l'utilisateur n'interagit pas, on passe au film suivant toutes les 10s
-let autoSlide = setInterval(() => {
-    let activeCard = document.querySelector('.num-card.active');
-    let nextCard = activeCard.nextElementSibling || document.querySelector('.num-card:first-child');
-    nextCard.click();
-}, 15000);
-
-// Arrêter le défilement si l'utilisateur clique
-cards.forEach(card => {
-    card.addEventListener('click', () => clearInterval(autoSlide));
-});
