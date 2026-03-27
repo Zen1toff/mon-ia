@@ -2,31 +2,42 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-    font-family: 'Inter', sans-serif;
-    background-color: #050505; /* Un noir plus profond */
+    font-family: 'Montserrat', sans-serif;
+    background-color: #010101; /* Presque noir pur */
     color: white;
     height: 100vh;
-    overflow: hidden; /* Pas de barres de défilement moche */
+    overflow: hidden;
 }
 
-/* 1. L'Arrière-plan Vidéo Immersif */
+/* 1. L'Arrière-plan Vidéo (Central) */
 #bg-video {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
     object-fit: cover;
-    z-index: -2;
-    transition: opacity 1.5s ease-in-out; /* Transition ultra-lente */
+    z-index: -3;
+    transition: opacity 2s ease-in-out; /* Super lent */
 }
 
 .bg-overlay {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    /* Gradient complexe pour l'ambiance */
-    background: radial-gradient(circle at 20% 50%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 80%),
-                linear-gradient(180deg, rgba(5,5,5,0.2) 0%, rgba(5,5,5,1) 100%);
+    /* Gradient super sombre et immersif */
+    background: radial-gradient(circle at 10% 50%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 70%),
+                linear-gradient(180deg, rgba(1,1,1,0.3) 0%, rgba(1,1,1,1) 100%);
+    z-index: -2;
+}
+
+/* Lueur de secours si la vidéo échoue */
+.backup-glow {
+    position: fixed;
+    bottom: -30vh; left: 50%;
+    transform: translateX(-50%);
+    width: 100vw; height: 60vh;
+    background: radial-gradient(circle, rgba(100,255,218,0.15) 0%, rgba(1,1,1,0) 70%);
     z-index: -1;
+    filter: blur(100px);
 }
 
 /* 2. L'Interface Utilisateur (UI) */
@@ -34,102 +45,92 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    padding: 40px 60px;
+    padding: 60px 10vw; /* Padding plus large pour le luxe */
     z-index: 1;
 }
 
-/* Barre de Navigation Éthérée */
 .navbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.8rem;
-    letter-spacing: 3px;
+    letter-spacing: 5px;
+    font-size: 0.7rem;
     text-transform: uppercase;
 }
 
 .logo {
-    font-family: 'Cinzel', serif;
-    font-size: 1.5rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2rem;
     font-weight: 700;
 }
 
-.nav-item {
-    margin: 0 25px;
-    opacity: 0.5;
-    cursor: pointer;
-    transition: opacity 0.3s;
-}
+.nav-right { display: flex; align-items: center; gap: 30px; opacity: 0.6; }
+.user-avatar { font-family: 'Cormorant Garamond', serif; font-size: 1.2rem; font-weight: 600; }
 
-.nav-item:hover, .nav-item.active { opacity: 1; }
-.nav-item.active { border-bottom: 2px solid white; padding-bottom: 5px; }
-
-.nav-right { display: flex; align-items: center; gap: 20px; }
-.user-avatar { width: 35px; height: 35px; background: #333; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); }
-
-/* Zone de Contenu Principal (Hero) */
+/* Zone Hero (Texte Magnifié) */
 .hero-content {
     flex-grow: 1;
     display: flex;
-    align-items: center; /* Centré verticalement */
-    margin-top: -50px; /* Légère correction */
+    align-items: center;
+    margin-top: -10vh;
 }
 
 .text-block {
-    max-width: 600px;
-    transition: opacity 0.8s ease, transform 0.8s ease;
+    max-width: 500px;
+    transition: opacity 1s ease, transform 1s ease;
 }
 
 .subtitle {
-    font-size: 0.8rem;
-    letter-spacing: 4px;
+    font-size: 0.7rem;
+    letter-spacing: 5px;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.6);
-    margin-bottom: 10px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 15px;
+    font-weight: 100;
 }
 
 .main-title {
-    font-family: 'Cinzel', serif;
-    font-size: 4.5rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 6rem; /* Gigantesque */
     font-weight: 700;
-    line-height: 1;
-    margin-bottom: 20px;
+    line-height: 0.9;
+    margin-bottom: 25px;
 }
 
 .description {
     font-size: 1rem;
-    line-height: 1.6;
-    opacity: 0.8;
+    line-height: 1.8;
+    opacity: 0.7;
     font-weight: 300;
-    margin-bottom: 30px;
+    margin-bottom: 40px;
 }
 
-/* Boutons Élégants (Glassmorphism) */
-.action-btns { display: flex; gap: 15px; }
+/* Boutons Minimalistes */
+.action-btns { display: flex; gap: 20px; }
 
 .btn-primary, .btn-secondary {
-    padding: 12px 35px;
-    border-radius: 5px;
-    font-size: 0.8rem;
-    letter-spacing: 2px;
+    padding: 15px 40px;
+    border-radius: 2px; /* Carré pour le luxe */
+    font-size: 0.7rem;
+    letter-spacing: 3px;
     font-weight: 700;
     text-transform: uppercase;
     cursor: pointer;
-    transition: background 0.3s, transform 0.2s;
+    transition: all 0.3s;
 }
 
 .btn-primary { background: white; color: black; border: none; }
-.btn-primary:hover { background: #e0e0e0; transform: translateY(-2px); }
+.btn-primary:hover { background: #64FFDA; color: black; transform: translateY(-3px); }
 
 .btn-secondary {
-    background: rgba(255,255,255,0.05);
+    background: transparent;
     color: white;
-    border: 1px solid rgba(255,255,255,0.1);
-    backdrop-filter: blur(10px); /* Flou de fond */
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 15px 20px;
 }
-.btn-secondary:hover { background: rgba(255,255,255,0.1); }
+.btn-secondary:hover { border-color: white; background: rgba(255,255,255,0.05); }
 
-/* 3. Le Carrousel de l'Éther (En bas) */
+/* 3. NOUVEAU Carrousel Typographique (ZÉRO IMAGE) */
 .carousel-container {
     margin-top: auto;
     width: 100%;
@@ -139,34 +140,53 @@ body {
 
 .carousel-track {
     display: flex;
-    gap: 20px;
-    align-items: flex-end; /* Aligné par le bas */
+    gap: 40px; /* Plus d'espace */
+    align-items: flex-end;
 }
 
-/* Les Cartes */
-.card {
-    width: 150px;
-    height: 100px;
-    border-radius: 8px;
-    overflow: hidden;
+.num-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     cursor: pointer;
-    transition: transform 0.5s ease, width 0.5s ease, height 0.5s ease, border 0.3s;
-    border: 2px solid transparent;
+    transition: all 0.5s ease;
+    opacity: 0.4; /* Inactif est sombre */
+    border-bottom: 1px solid transparent;
+    padding-bottom: 10px;
 }
 
-.card img {
-    width: 100%; height: 100%;
-    object-fit: cover;
-    opacity: 0.5; /* Cartes inactives sont sombres */
+.num {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 3rem; /* Géant mais fin */
+    font-weight: 100;
+    line-height: 1;
+    transition: all 0.5s ease;
+}
+
+.mini-title {
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.6);
+    margin-top: 5px;
+    opacity: 0; /* Caché au début */
     transition: opacity 0.5s;
 }
 
-/* La Carte Active : Elle est plus grande et brillante */
-.card.active {
-    width: 180px;
-    height: 120px;
-    transform: translateY(-10px);
-    border: 2px solid white;
+/* La Carte Active : Elle brille en Néon */
+.num-card.active {
+    opacity: 1;
+    transform: translateY(-5px);
+    border-bottom: 2px solid white;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5),
+                 0 0 20px rgba(100,255,218,0.3); /* Lueur néon subtile */
 }
 
-.card.active img { opacity: 1; }
+.num-card.active .num { font-weight: 700; }
+.num-card.active .mini-title { opacity: 1; } /* Révèle le titre */
+
+/* Effet de lueur verte néon au survol */
+.num-card:hover:not(.active) {
+    opacity: 0.8;
+    color: #64FFDA; /* Vert émeraude */
+}
