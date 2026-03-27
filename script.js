@@ -1,4 +1,4 @@
-const cards = document.querySelectorAll('.card');
+const cards = document.querySelectorAll('.num-card');
 const bgVideo = document.getElementById('bg-video');
 const videoSource = bgVideo.querySelector('source');
 const textBlock = document.querySelector('.text-block');
@@ -8,9 +8,18 @@ const mainTitle = document.querySelector('.main-title');
 const subtitle = document.querySelector('.subtitle');
 const description = document.querySelector('.description');
 
+// Préchargement des vidéos (pour éviter le lag lors du changement)
+cards.forEach(card => {
+    const videoUrl = card.getAttribute('data-video');
+    if (videoUrl) {
+        const preloader = new Audio(videoUrl); // Truc de hack pour précharger
+        preloader.preload = 'auto';
+    }
+});
+
 cards.forEach(card => {
     card.addEventListener('click', () => {
-        // 1. Gérer l'état actif des cartes
+        // 1. Gérer l'état actif des cartes (Typographiques)
         cards.forEach(c => c.classList.remove('active'));
         card.classList.add('active');
 
@@ -18,24 +27,21 @@ cards.forEach(card => {
         const newVideoSrc = card.getAttribute('data-video');
         
         if (newVideoSrc && videoSource.src !== newVideoSrc) {
-            // Cacher la vidéo actuelle
             bgVideo.style.opacity = '0';
 
-            // Changer la source après un court délai
             setTimeout(() => {
                 videoSource.src = newVideoSrc;
-                bgVideo.load(); // Recharger la vidéo
+                bgVideo.load();
                 
-                // Révéler la nouvelle vidéo une fois chargée
                 bgVideo.onloadeddata = () => {
                     bgVideo.style.opacity = '1';
                 };
-            }, 500); // 500ms de noir
+            }, 600); // Un peu plus long pour le luxe
         }
 
         // 3. Mettre à jour les textes (avec une petite animation)
         textBlock.style.opacity = '0';
-        textBlock.style.transform = 'translateY(10px)';
+        textBlock.style.transform = 'translateY(15px)';
 
         setTimeout(() => {
             mainTitle.innerText = card.getAttribute('data-title');
@@ -44,6 +50,6 @@ cards.forEach(card => {
             
             textBlock.style.opacity = '1';
             textBlock.style.transform = 'translateY(0)';
-        }, 500); // Synchronisé avec le fondu vidéo
+        }, 600);
     });
 });
