@@ -1,54 +1,64 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PS5 Interface Clone</title>
+    <title>Cinémathèque Éthérée</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-    <div class="ps5-container">
-        <div class="bg-overlay"></div>
+    <video autoplay muted loop id="bg-video" class="bg-fade-in">
+        <source src="https://assets.codepen.io/605876/dune-trailer-clip.mp4" type="video/mp4">
+    </video>
+    <div class="bg-overlay"></div>
+
+    <div class="ui-wrapper">
         
-        <header class="top-menu">
+        <header class="navbar">
+            <div class="logo">ÉTHÉRÉE</div>
             <nav>
-                <span class="active">Juegos</span>
-                <span>Multimedia</span>
+                <span class="nav-item active">DÉCOUVRIR</span>
+                <span class="nav-item">COLLECTIONS</span>
+                <span class="nav-item">DIRECT</span>
             </nav>
-            <div class="top-icons">
-                <i class="search-icon">🔍</i>
-                <i class="settings-icon">⚙️</i>
+            <div class="nav-right">
+                <div class="search-icon">🔍</div>
                 <div class="user-avatar"></div>
-                <div class="clock" id="clock">18:45</div>
             </div>
         </header>
 
-        <main class="game-shelf">
-            <div class="game-card active" data-bg="https://images.alphacoders.com/110/1101980.jpg">
-                <img src="https://upload.wikimedia.org/wikipedia/en/a/a5/Spider-Man_Miles_Morales_crested.png" alt="Spider-Man">
-            </div>
-            <div class="game-card" data-bg="https://images7.alphacoders.com/109/1097827.jpg">
-                <img src="https://upload.wikimedia.org/wikipedia/en/b/b1/Horizon_Forbidden_West_cover_art.jpg" alt="Horizon">
-            </div>
-            <div class="game-card" data-bg="https://images2.alphacoders.com/114/1140320.jpg">
-                <img src="https://upload.wikimedia.org/wikipedia/en/c/ce/Ratchet_%26_Clank_Rift_Apart_cover_art.jpg" alt="Ratchet">
-            </div>
-            <div class="game-card" data-bg="https://images5.alphacoders.com/112/1126601.png">
-                <img src="https://upload.wikimedia.org/wikipedia/en/e/e0/Demon%27s_Souls_2020_cover_art.jpg" alt="Demons Souls">
-            </div>
-            <div class="game-card more">
-                <div class="plus-icon">➕</div>
+        <main class="hero-content">
+            <div class="text-block">
+                <h2 class="subtitle">UN FILM DE DENIS VILLENEUVE</h2>
+                <h1 class="main-title">DUNE</h1>
+                <p class="description">L'adaptation cinématographique du chef-d'œuvre de Frank Herbert. Une aventure mythique et chargée d'émotions.</p>
+                
+                <div class="action-btns">
+                    <button class="btn-primary">REGARDER</button>
+                    <button class="btn-secondary">AJOUTER</button>
+                </div>
             </div>
         </main>
 
-        <section class="game-info">
-            <h1 id="game-title">Marvel's Spider-Man: Miles Morales</h1>
-            <div class="buttons">
-                <button class="btn-play">Jugar</button>
-                <button class="btn-more">...</button>
+        <footer class="carousel-container">
+            <div class="carousel-track">
+                <div class="card active" data-video="https://assets.codepen.io/605876/dune-trailer-clip.mp4" data-title="DUNE" data-subtitle="UN FILM DE DENIS VILLENEUVE" data-desc="L'adaptation cinématographique du chef-d'œuvre de Frank Herbert.">
+                    <img src="https://image.tmdb.org/t/p/original/m9rF1QJ9z3W4z1n8G0S8Vj6J4H9.jpg" alt="Dune">
+                </div>
+                <div class="card" data-video="https://assets.codepen.io/210284/the-batman-trailer.mp4" data-title="THE BATMAN" data-subtitle="PAR MATT REEVES" data-desc="Dans sa deuxième année de lutte contre le crime, Batman enquête sur la corruption à Gotham City.">
+                    <img src="https://image.tmdb.org/t/p/original/53b9576c9b360b09f7a7f4a5.jpg" alt="The Batman">
+                </div>
+                <div class="card" data-video="https://assets.codepen.io/210284/blade-runner-2049-trailer.mp4" data-title="BLADE RUNNER 2049" data-subtitle="UN CHEF-D'ŒUVRE VISUEL" data-desc="Un nouvel blade runner découvre un secret enfoui depuis longtemps qui pourrait plonger ce qui reste de la société dans le chaos.">
+                    <img src="https://image.tmdb.org/t/p/original/gajRo5AHTctL444b0fJ8e3cW1F4.jpg" alt="Blade Runner 2049">
+                </div>
+                <div class="card" data-video="https://assets.codepen.io/210284/interstellar-trailer.mp4" data-title="INTERSTELLAR" data-subtitle="PAR CHRISTOPHER NOLAN" data-desc="Un groupe d'explorateurs utilise un trou de ver pour tenter de sauver l'humanité.">
+                    <img src="https://image.tmdb.org/t/p/original/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg" alt="Interstellar">
+                </div>
             </div>
-        </section>
+        </footer>
+
     </div>
 
     <script src="script.js"></script>
