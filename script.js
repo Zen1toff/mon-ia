@@ -1,55 +1,54 @@
-const cards = document.querySelectorAll('.num-card');
-const bgVideo = document.getElementById('bg-video');
-const videoSource = bgVideo.querySelector('source');
-const textBlock = document.querySelector('.text-block');
+// SÉLECTEURS
+const searchBtn = document.querySelector('.search-icon');
+const searchOverlay = document.getElementById('search-overlay');
+const closeSearch = document.querySelector('.close-btn');
+const profileBtn = document.querySelector('.user-avatar');
+const profileModal = document.getElementById('profile-modal');
+const btnPlay = document.querySelector('.btn-primary');
+const videoPlayer = document.getElementById('video-player');
+const closePlayer = document.querySelector('.close-player');
 
-// Les éléments de texte à mettre à jour
-const mainTitle = document.querySelector('.main-title');
-const subtitle = document.querySelector('.subtitle');
-const description = document.querySelector('.description');
+// 1. GESTION DE LA RECHERCHE
+searchBtn.onclick = () => {
+    searchOverlay.style.display = 'flex';
+    setTimeout(() => searchOverlay.style.opacity = '1', 10);
+    document.getElementById('search-input').focus();
+};
 
-// Préchargement des vidéos (pour éviter le lag lors du changement)
+closeSearch.onclick = () => {
+    searchOverlay.style.opacity = '0';
+    setTimeout(() => searchOverlay.style.display = 'none', 500);
+};
+
+// 2. GESTION DU PROFIL (Toggle)
+profileBtn.onclick = (e) => {
+    e.stopPropagation();
+    profileModal.style.display = (profileModal.style.display === 'block') ? 'none' : 'block';
+};
+
+// Fermer le profil si on clique ailleurs
+window.onclick = () => profileModal.style.display = 'none';
+
+// 3. BOUTON REGARDER (L'effet Whaou)
+btnPlay.onclick = () => {
+    videoPlayer.classList.add('active');
+    // On simule le lancement du film
+    // Ici, tu pourrais charger une autre vidéo ou passer en plein écran
+};
+
+closePlayer.onclick = () => {
+    videoPlayer.classList.remove('active');
+};
+
+// 4. DÉFILEMENT AUTOMATIQUE DES FILMS (Optionnel)
+// Si l'utilisateur n'interagit pas, on passe au film suivant toutes les 10s
+let autoSlide = setInterval(() => {
+    let activeCard = document.querySelector('.num-card.active');
+    let nextCard = activeCard.nextElementSibling || document.querySelector('.num-card:first-child');
+    nextCard.click();
+}, 15000);
+
+// Arrêter le défilement si l'utilisateur clique
 cards.forEach(card => {
-    const videoUrl = card.getAttribute('data-video');
-    if (videoUrl) {
-        const preloader = new Audio(videoUrl); // Truc de hack pour précharger
-        preloader.preload = 'auto';
-    }
-});
-
-cards.forEach(card => {
-    card.addEventListener('click', () => {
-        // 1. Gérer l'état actif des cartes (Typographiques)
-        cards.forEach(c => c.classList.remove('active'));
-        card.classList.add('active');
-
-        // 2. Transition de l'arrière-plan (Fondu lent)
-        const newVideoSrc = card.getAttribute('data-video');
-        
-        if (newVideoSrc && videoSource.src !== newVideoSrc) {
-            bgVideo.style.opacity = '0';
-
-            setTimeout(() => {
-                videoSource.src = newVideoSrc;
-                bgVideo.load();
-                
-                bgVideo.onloadeddata = () => {
-                    bgVideo.style.opacity = '1';
-                };
-            }, 600); // Un peu plus long pour le luxe
-        }
-
-        // 3. Mettre à jour les textes (avec une petite animation)
-        textBlock.style.opacity = '0';
-        textBlock.style.transform = 'translateY(15px)';
-
-        setTimeout(() => {
-            mainTitle.innerText = card.getAttribute('data-title');
-            subtitle.innerText = card.getAttribute('data-subtitle');
-            description.innerText = card.getAttribute('data-desc');
-            
-            textBlock.style.opacity = '1';
-            textBlock.style.transform = 'translateY(0)';
-        }, 600);
-    });
+    card.addEventListener('click', () => clearInterval(autoSlide));
 });
