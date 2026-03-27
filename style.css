@@ -1,192 +1,90 @@
-/* Reset & Base */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-    font-family: 'Montserrat', sans-serif;
-    background-color: #010101; /* Presque noir pur */
-    color: white;
-    height: 100vh;
-    overflow: hidden;
-}
-
-/* 1. L'Arrière-plan Vidéo (Central) */
-#bg-video {
+/* --- RECHERCHE IMMERSIVE --- */
+.overlay {
     position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-    z-index: -3;
-    transition: opacity 2s ease-in-out; /* Super lent */
-}
-
-.bg-overlay {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    /* Gradient super sombre et immersif */
-    background: radial-gradient(circle at 10% 50%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 70%),
-                linear-gradient(180deg, rgba(1,1,1,0.3) 0%, rgba(1,1,1,1) 100%);
-    z-index: -2;
-}
-
-/* Lueur de secours si la vidéo échoue */
-.backup-glow {
-    position: fixed;
-    bottom: -30vh; left: 50%;
-    transform: translateX(-50%);
-    width: 100vw; height: 60vh;
-    background: radial-gradient(circle, rgba(100,255,218,0.15) 0%, rgba(1,1,1,0) 70%);
-    z-index: -1;
-    filter: blur(100px);
-}
-
-/* 2. L'Interface Utilisateur (UI) */
-.ui-wrapper {
-    height: 100%;
-    display: flex;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(50px); /* Flou extrême */
+    z-index: 100;
+    display: none; /* Caché */
     flex-direction: column;
-    padding: 60px 10vw; /* Padding plus large pour le luxe */
-    z-index: 1;
-}
-
-.navbar {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    letter-spacing: 5px;
-    font-size: 0.7rem;
-    text-transform: uppercase;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.5s ease;
 }
 
-.logo {
+.search-box input {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.2);
+    color: white;
+    font-size: 3rem;
     font-family: 'Cormorant Garamond', serif;
-    font-size: 2rem;
-    font-weight: 700;
+    width: 60vw;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.5s;
 }
 
-.nav-right { display: flex; align-items: center; gap: 30px; opacity: 0.6; }
-.user-avatar { font-family: 'Cormorant Garamond', serif; font-size: 1.2rem; font-weight: 600; }
+.search-box input:focus { border-color: #64FFDA; }
 
-/* Zone Hero (Texte Magnifié) */
-.hero-content {
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    margin-top: -10vh;
+/* --- PROFIL LUXUEUX --- */
+.modal {
+    position: fixed;
+    top: 80px; right: 60px;
+    z-index: 99;
+    display: none;
 }
 
-.text-block {
-    max-width: 500px;
-    transition: opacity 1s ease, transform 1s ease;
+.profile-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 30px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    animation: slideIn 0.4s ease-out;
 }
 
-.subtitle {
-    font-size: 0.7rem;
-    letter-spacing: 5px;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.4);
-    margin-bottom: 15px;
-    font-weight: 100;
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.main-title {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 6rem; /* Gigantesque */
-    font-weight: 700;
-    line-height: 0.9;
-    margin-bottom: 25px;
+.big-avatar {
+    width: 80px; height: 80px;
+    background: linear-gradient(45deg, #64FFDA, #0072ce);
+    border-radius: 50%;
+    margin: 0 auto 15px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; font-weight: bold;
 }
 
-.description {
-    font-size: 1rem;
-    line-height: 1.8;
-    opacity: 0.7;
-    font-weight: 300;
-    margin-bottom: 40px;
+/* --- LE LECTEUR VIDÉO (EFFET CINÉMA) --- */
+#video-player {
+    position: fixed;
+    inset: 0;
+    background: black;
+    z-index: 200;
+    display: none;
+    cursor: none; /* On cache la souris comme au ciné */
 }
 
-/* Boutons Minimalistes */
-.action-btns { display: flex; gap: 20px; }
+#video-player.active { display: flex; animation: cinemaIn 1s forwards; }
 
-.btn-primary, .btn-secondary {
-    padding: 15px 40px;
-    border-radius: 2px; /* Carré pour le luxe */
-    font-size: 0.7rem;
-    letter-spacing: 3px;
-    font-weight: 700;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.3s;
+@keyframes cinemaIn {
+    from { clip-path: inset(50% 50% 50% 50%); }
+    to { clip-path: inset(0 0 0 0); }
 }
 
-.btn-primary { background: white; color: black; border: none; }
-.btn-primary:hover { background: #64FFDA; color: black; transform: translateY(-3px); }
-
-.btn-secondary {
+.close-player {
+    position: absolute;
+    top: 40px; left: 40px;
     background: transparent;
     color: white;
-    border: 1px solid rgba(255,255,255,0.2);
-    padding: 15px 20px;
-}
-.btn-secondary:hover { border-color: white; background: rgba(255,255,255,0.05); }
-
-/* 3. NOUVEAU Carrousel Typographique (ZÉRO IMAGE) */
-.carousel-container {
-    margin-top: auto;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-}
-
-.carousel-track {
-    display: flex;
-    gap: 40px; /* Plus d'espace */
-    align-items: flex-end;
-}
-
-.num-card {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    border: 1px solid white;
+    padding: 10px 20px;
     cursor: pointer;
-    transition: all 0.5s ease;
-    opacity: 0.4; /* Inactif est sombre */
-    border-bottom: 1px solid transparent;
-    padding-bottom: 10px;
-}
-
-.num {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 3rem; /* Géant mais fin */
-    font-weight: 100;
-    line-height: 1;
-    transition: all 0.5s ease;
-}
-
-.mini-title {
-    font-size: 0.6rem;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.6);
-    margin-top: 5px;
-    opacity: 0; /* Caché au début */
-    transition: opacity 0.5s;
-}
-
-/* La Carte Active : Elle brille en Néon */
-.num-card.active {
-    opacity: 1;
-    transform: translateY(-5px);
-    border-bottom: 2px solid white;
-    text-shadow: 0 0 10px rgba(255,255,255,0.5),
-                 0 0 20px rgba(100,255,218,0.3); /* Lueur néon subtile */
-}
-
-.num-card.active .num { font-weight: 700; }
-.num-card.active .mini-title { opacity: 1; } /* Révèle le titre */
-
-/* Effet de lueur verte néon au survol */
-.num-card:hover:not(.active) {
-    opacity: 0.8;
-    color: #64FFDA; /* Vert émeraude */
+    z-index: 201;
 }
