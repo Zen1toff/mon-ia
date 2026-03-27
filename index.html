@@ -1,65 +1,31 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CINÉMATHÈQUE ÉTHÉRÉE V2</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;600;700&family=Montserrat:wght@100;400;700&display=swap" rel="stylesheet">
-</head>
-<body>
-
-    <video autoplay muted loop id="bg-video" class="bg-fade-in">
-        <source src="https://player.vimeo.com/external/372782436.hd.mp4?s=e733b9b4f7a26f3455a1df4d8a6b1c41ac2a7873&profile_id=175" type="video/mp4">
-    </video>
-    <div class="bg-overlay"></div>
-    <div class="backup-glow"></div>
-
-    <div class="ui-wrapper">
-        
-        <header class="navbar">
-            <div class="logo">ÉTHÉRÉE</div>
-            <div class="nav-right">
-                <div class="search-icon">🔍</div>
-                <div class="user-avatar">J</div>
+<div id="search-overlay" class="overlay">
+    <button class="close-btn">×</button>
+    <div class="search-box">
+        <input type="text" placeholder="RECHERCHER UN CHEF-D'ŒUVRE..." id="search-input">
+        <div class="search-results">
             </div>
-        </header>
-
-        <main class="hero-content">
-            <div class="text-block">
-                <h2 class="subtitle">UN FILM DE DENIS VILLENEUVE</h2>
-                <h1 class="main-title">DUNE</h1>
-                <p class="description">L'adaptation cinématographique du chef-d'œuvre de Frank Herbert.</p>
-                <div class="action-btns">
-                    <button class="btn-primary">REGARDER</button>
-                    <button class="btn-secondary">ⓘ</button>
-                </div>
-            </div>
-        </main>
-
-        <footer class="carousel-container">
-            <div class="carousel-track">
-                <div class="num-card active" data-video="https://player.vimeo.com/external/372782436.hd.mp4?s=e733b9b4f7a26f3455a1df4d8a6b1c41ac2a7873&profile_id=175" data-title="DUNE" data-subtitle="UN FILM DE DENIS VILLENEUVE" data-desc="L'adaptation cinématographique du chef-d'œuvre de Frank Herbert.">
-                    <span class="num">01</span>
-                    <span class="mini-title">DUNE</span>
-                </div>
-                <div class="num-card" data-video="https://player.vimeo.com/external/498422709.hd.mp4?s=69a68a1835560b33b7e719b0b435605b0d0617be&profile_id=175" data-title="INTERSTELLAR" data-subtitle="PAR CHRISTOPHER NOLAN" data-desc="Un groupe d'explorateurs utilise un trou de ver pour sauver l'humanité.">
-                    <span class="num">02</span>
-                    <span class="mini-title">INTERSTELLAR</span>
-                </div>
-                <div class="num-card" data-video="https://player.vimeo.com/external/511397022.hd.mp4?s=d00192dfac2089408a264e16d0f6224d45d31569&profile_id=175" data-title="OPPENHEIMER" data-subtitle="UN CHEF-D'ŒUVRE VISUEL" data-desc="Un biopic sur J. Robert Oppenheimer, le père de la bombe atomique.">
-                    <span class="num">03</span>
-                    <span class="mini-title">OPPENHEIMER</span>
-                </div>
-                <div class="num-card" data-video="https://player.vimeo.com/external/498418080.hd.mp4?s=3b49e1e57c6b4122d103b9b4c2b9a1d4889c1f6b&profile_id=175" data-title="BLADE RUNNER" data-subtitle="LE CHEF-D'ŒUVRE DE RIDLEY SCOTT" data-desc="Dans un futur dystopique, un blade runner traque des répliquants.">
-                    <span class="num">04</span>
-                    <span class="mini-title">BLADE RUNNER 2049</span>
-                </div>
-            </div>
-        </footer>
-
     </div>
+</div>
 
-    <script src="script.js"></script>
-</body>
-</html>
+<div id="profile-modal" class="modal">
+    <div class="profile-card">
+        <div class="profile-header">
+            <div class="big-avatar">J</div>
+            <h2>JULIEN</h2>
+            <span class="membership">MEMBRE ÉLITE</span>
+        </div>
+        <div class="profile-stats">
+            <div><span>124</span><p>FILMS</p></div>
+            <div><span>42</span><p>LISTE</p></div>
+        </div>
+        <button class="btn-logout">DÉCONNEXION</button>
+    </div>
+</div>
+
+<div id="video-player" class="player-hidden">
+    <button class="close-player">RETOUR AU CATALOGUE</button>
+    <div class="video-controls">
+        <div class="progress-bar"><div class="progress"></div></div>
+        <span class="time">00:00 / 02:45</span>
+    </div>
+</div>
