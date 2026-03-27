@@ -1,30 +1,49 @@
+const cards = document.querySelectorAll('.card');
+const bgVideo = document.getElementById('bg-video');
+const videoSource = bgVideo.querySelector('source');
+const textBlock = document.querySelector('.text-block');
 
-const cards = document.querySelectorAll('.game-card');
-const container = document.querySelector('.ps5-container');
-const title = document.getElementById('game-title');
+// Les éléments de texte à mettre à jour
+const mainTitle = document.querySelector('.main-title');
+const subtitle = document.querySelector('.subtitle');
+const description = document.querySelector('.description');
 
 cards.forEach(card => {
-    card.addEventListener('mouseenter', () => {
-        // Quitar clase activa de los demás
+    card.addEventListener('click', () => {
+        // 1. Gérer l'état actif des cartes
         cards.forEach(c => c.classList.remove('active'));
-        
-        // Activar la actual
         card.classList.add('active');
+
+        // 2. Transition de l'arrière-plan (Fondu lent)
+        const newVideoSrc = card.getAttribute('data-video');
         
-        // Cambiar fondo con el atributo data-bg
-        const newBg = card.getAttribute('data-bg');
-        if(newBg) {
-            container.style.backgroundImage = `url('${newBg}')`;
+        if (newVideoSrc && videoSource.src !== newVideoSrc) {
+            // Cacher la vidéo actuelle
+            bgVideo.style.opacity = '0';
+
+            // Changer la source après un court délai
+            setTimeout(() => {
+                videoSource.src = newVideoSrc;
+                bgVideo.load(); // Recharger la vidéo
+                
+                // Révéler la nouvelle vidéo une fois chargée
+                bgVideo.onloadeddata = () => {
+                    bgVideo.style.opacity = '1';
+                };
+            }, 500); // 500ms de noir
         }
-        
-        // Cambiar título (ejemplo simple)
-        const altText = card.querySelector('img')?.alt;
-        if(altText) title.innerText = altText;
+
+        // 3. Mettre à jour les textes (avec une petite animation)
+        textBlock.style.opacity = '0';
+        textBlock.style.transform = 'translateY(10px)';
+
+        setTimeout(() => {
+            mainTitle.innerText = card.getAttribute('data-title');
+            subtitle.innerText = card.getAttribute('data-subtitle');
+            description.innerText = card.getAttribute('data-desc');
+            
+            textBlock.style.opacity = '1';
+            textBlock.style.transform = 'translateY(0)';
+        }, 500); // Synchronisé avec le fondu vidéo
     });
 });
-
-// Reloj simple
-setInterval(() => {
-    const now = new Date();
-    document.getElementById('clock').innerText = now.getHours() + ":" + now.getMinutes().toString().padStart(2, '0');
-}, 1000);
