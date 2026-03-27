@@ -1,71 +1,172 @@
-
-:root {
-    --ps-blue: #0072ce;
-    --text-white: #ffffff;
-}
+/* Reset & Base */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-    margin: 0;
-    font-family: 'Segoe UI', sans-serif;
-    background: #000;
+    font-family: 'Inter', sans-serif;
+    background-color: #050505; /* Un noir plus profond */
     color: white;
-    overflow: hidden;
+    height: 100vh;
+    overflow: hidden; /* Pas de barres de défilement moche */
 }
 
-.ps5-container {
-    height: 100vh;
-    width: 100vw;
-    background-size: cover;
-    background-position: center;
-    transition: background 0.8s ease-in-out;
-    display: flex;
-    flex-direction: column;
-    padding: 40px 80px;
+/* 1. L'Arrière-plan Vidéo Immersif */
+#bg-video {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    z-index: -2;
+    transition: opacity 1.5s ease-in-out; /* Transition ultra-lente */
 }
 
 .bg-overlay {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.8) 100%);
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    /* Gradient complexe pour l'ambiance */
+    background: radial-gradient(circle at 20% 50%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 80%),
+                linear-gradient(180deg, rgba(5,5,5,0.2) 0%, rgba(5,5,5,1) 100%);
     z-index: -1;
 }
 
-/* Menú de juegos */
-.game-shelf {
+/* 2. L'Interface Utilisateur (UI) */
+.ui-wrapper {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 40px 60px;
+    z-index: 1;
+}
+
+/* Barre de Navigation Éthérée */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+.logo {
+    font-family: 'Cinzel', serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.nav-item {
+    margin: 0 25px;
+    opacity: 0.5;
+    cursor: pointer;
+    transition: opacity 0.3s;
+}
+
+.nav-item:hover, .nav-item.active { opacity: 1; }
+.nav-item.active { border-bottom: 2px solid white; padding-bottom: 5px; }
+
+.nav-right { display: flex; align-items: center; gap: 20px; }
+.user-avatar { width: 35px; height: 35px; background: #333; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); }
+
+/* Zone de Contenu Principal (Hero) */
+.hero-content {
+    flex-grow: 1;
+    display: flex;
+    align-items: center; /* Centré verticalement */
+    margin-top: -50px; /* Légère correction */
+}
+
+.text-block {
+    max-width: 600px;
+    transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.subtitle {
+    font-size: 0.8rem;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 10px;
+}
+
+.main-title {
+    font-family: 'Cinzel', serif;
+    font-size: 4.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 20px;
+}
+
+.description {
+    font-size: 1rem;
+    line-height: 1.6;
+    opacity: 0.8;
+    font-weight: 300;
+    margin-bottom: 30px;
+}
+
+/* Boutons Élégants (Glassmorphism) */
+.action-btns { display: flex; gap: 15px; }
+
+.btn-primary, .btn-secondary {
+    padding: 12px 35px;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.2s;
+}
+
+.btn-primary { background: white; color: black; border: none; }
+.btn-primary:hover { background: #e0e0e0; transform: translateY(-2px); }
+
+.btn-secondary {
+    background: rgba(255,255,255,0.05);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px); /* Flou de fond */
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.1); }
+
+/* 3. Le Carrousel de l'Éther (En bas) */
+.carousel-container {
+    margin-top: auto;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.carousel-track {
     display: flex;
     gap: 20px;
-    margin-top: 100px;
+    align-items: flex-end; /* Aligné par le bas */
 }
 
-.game-card {
-    width: 120px;
-    height: 120px;
-    border-radius: 15px;
+/* Les Cartes */
+.card {
+    width: 150px;
+    height: 100px;
+    border-radius: 8px;
     overflow: hidden;
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), border 0.3s;
     cursor: pointer;
-    border: 3px solid transparent;
+    transition: transform 0.5s ease, width 0.5s ease, height 0.5s ease, border 0.3s;
+    border: 2px solid transparent;
 }
 
-.game-card img { width: 100%; height: 100%; object-fit: cover; }
-
-.game-card.active {
-    transform: scale(1.4);
-    border: 3px solid var(--text-white);
-    margin: 0 20px;
+.card img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    opacity: 0.5; /* Cartes inactives sont sombres */
+    transition: opacity 0.5s;
 }
 
-.game-info {
-    margin-top: auto;
-    margin-bottom: 50px;
+/* La Carte Active : Elle est plus grande et brillante */
+.card.active {
+    width: 180px;
+    height: 120px;
+    transform: translateY(-10px);
+    border: 2px solid white;
 }
 
-.btn-play {
-    background: white;
-    color: black;
-    border: none;
-    padding: 12px 40px;
-    border-radius: 30px;
-    font-weight: bold;
-    font-size: 1.1em;
-}
+.card.active img { opacity: 1; }
