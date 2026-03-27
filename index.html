@@ -3,29 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinémathèque Éthérée</title>
+    <title>CINÉMATHÈQUE ÉTHÉRÉE V2</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;600;700&family=Montserrat:wght@100;400;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
     <video autoplay muted loop id="bg-video" class="bg-fade-in">
-        <source src="https://assets.codepen.io/605876/dune-trailer-clip.mp4" type="video/mp4">
+        <source src="https://player.vimeo.com/external/372782436.hd.mp4?s=e733b9b4f7a26f3455a1df4d8a6b1c41ac2a7873&profile_id=175" type="video/mp4">
     </video>
     <div class="bg-overlay"></div>
+    <div class="backup-glow"></div>
 
     <div class="ui-wrapper">
         
         <header class="navbar">
             <div class="logo">ÉTHÉRÉE</div>
-            <nav>
-                <span class="nav-item active">DÉCOUVRIR</span>
-                <span class="nav-item">COLLECTIONS</span>
-                <span class="nav-item">DIRECT</span>
-            </nav>
             <div class="nav-right">
                 <div class="search-icon">🔍</div>
-                <div class="user-avatar"></div>
+                <div class="user-avatar">J</div>
             </div>
         </header>
 
@@ -33,28 +29,31 @@
             <div class="text-block">
                 <h2 class="subtitle">UN FILM DE DENIS VILLENEUVE</h2>
                 <h1 class="main-title">DUNE</h1>
-                <p class="description">L'adaptation cinématographique du chef-d'œuvre de Frank Herbert. Une aventure mythique et chargée d'émotions.</p>
-                
+                <p class="description">L'adaptation cinématographique du chef-d'œuvre de Frank Herbert.</p>
                 <div class="action-btns">
                     <button class="btn-primary">REGARDER</button>
-                    <button class="btn-secondary">AJOUTER</button>
+                    <button class="btn-secondary">ⓘ</button>
                 </div>
             </div>
         </main>
 
         <footer class="carousel-container">
             <div class="carousel-track">
-                <div class="card active" data-video="https://assets.codepen.io/605876/dune-trailer-clip.mp4" data-title="DUNE" data-subtitle="UN FILM DE DENIS VILLENEUVE" data-desc="L'adaptation cinématographique du chef-d'œuvre de Frank Herbert.">
-                    <img src="https://image.tmdb.org/t/p/original/m9rF1QJ9z3W4z1n8G0S8Vj6J4H9.jpg" alt="Dune">
+                <div class="num-card active" data-video="https://player.vimeo.com/external/372782436.hd.mp4?s=e733b9b4f7a26f3455a1df4d8a6b1c41ac2a7873&profile_id=175" data-title="DUNE" data-subtitle="UN FILM DE DENIS VILLENEUVE" data-desc="L'adaptation cinématographique du chef-d'œuvre de Frank Herbert.">
+                    <span class="num">01</span>
+                    <span class="mini-title">DUNE</span>
                 </div>
-                <div class="card" data-video="https://assets.codepen.io/210284/the-batman-trailer.mp4" data-title="THE BATMAN" data-subtitle="PAR MATT REEVES" data-desc="Dans sa deuxième année de lutte contre le crime, Batman enquête sur la corruption à Gotham City.">
-                    <img src="https://image.tmdb.org/t/p/original/53b9576c9b360b09f7a7f4a5.jpg" alt="The Batman">
+                <div class="num-card" data-video="https://player.vimeo.com/external/498422709.hd.mp4?s=69a68a1835560b33b7e719b0b435605b0d0617be&profile_id=175" data-title="INTERSTELLAR" data-subtitle="PAR CHRISTOPHER NOLAN" data-desc="Un groupe d'explorateurs utilise un trou de ver pour sauver l'humanité.">
+                    <span class="num">02</span>
+                    <span class="mini-title">INTERSTELLAR</span>
                 </div>
-                <div class="card" data-video="https://assets.codepen.io/210284/blade-runner-2049-trailer.mp4" data-title="BLADE RUNNER 2049" data-subtitle="UN CHEF-D'ŒUVRE VISUEL" data-desc="Un nouvel blade runner découvre un secret enfoui depuis longtemps qui pourrait plonger ce qui reste de la société dans le chaos.">
-                    <img src="https://image.tmdb.org/t/p/original/gajRo5AHTctL444b0fJ8e3cW1F4.jpg" alt="Blade Runner 2049">
+                <div class="num-card" data-video="https://player.vimeo.com/external/511397022.hd.mp4?s=d00192dfac2089408a264e16d0f6224d45d31569&profile_id=175" data-title="OPPENHEIMER" data-subtitle="UN CHEF-D'ŒUVRE VISUEL" data-desc="Un biopic sur J. Robert Oppenheimer, le père de la bombe atomique.">
+                    <span class="num">03</span>
+                    <span class="mini-title">OPPENHEIMER</span>
                 </div>
-                <div class="card" data-video="https://assets.codepen.io/210284/interstellar-trailer.mp4" data-title="INTERSTELLAR" data-subtitle="PAR CHRISTOPHER NOLAN" data-desc="Un groupe d'explorateurs utilise un trou de ver pour tenter de sauver l'humanité.">
-                    <img src="https://image.tmdb.org/t/p/original/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg" alt="Interstellar">
+                <div class="num-card" data-video="https://player.vimeo.com/external/498418080.hd.mp4?s=3b49e1e57c6b4122d103b9b4c2b9a1d4889c1f6b&profile_id=175" data-title="BLADE RUNNER" data-subtitle="LE CHEF-D'ŒUVRE DE RIDLEY SCOTT" data-desc="Dans un futur dystopique, un blade runner traque des répliquants.">
+                    <span class="num">04</span>
+                    <span class="mini-title">BLADE RUNNER 2049</span>
                 </div>
             </div>
         </footer>
