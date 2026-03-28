@@ -1,31 +1,189 @@
-<div id="search-overlay" class="overlay">
-    <button class="close-btn">×</button>
-    <div class="search-box">
-        <input type="text" placeholder="RECHERCHER UN CHEF-D'ŒUVRE..." id="search-input">
-        <div class="search-results">
-            </div>
-    </div>
-</div>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IA Cordes Élastiques - MediaPipe</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
-<div id="profile-modal" class="modal">
-    <div class="profile-card">
-        <div class="profile-header">
-            <div class="big-avatar">J</div>
-            <h2>JULIEN</h2>
-            <span class="membership">MEMBRE ÉLITE</span>
-        </div>
-        <div class="profile-stats">
-            <div><span>124</span><p>FILMS</p></div>
-            <div><span>42</span><p>LISTE</p></div>
-        </div>
-        <button class="btn-logout">DÉCONNEXION</button>
-    </div>
-</div>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #050505; /* Fond très sombre pour le contraste */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
-<div id="video-player" class="player-hidden">
-    <button class="close-player">RETOUR AU CATALOGUE</button>
-    <div class="video-controls">
-        <div class="progress-bar"><div class="progress"></div></div>
-        <span class="time">00:00 / 02:45</span>
+        /* Conteneur principal pour superposer la vidéo et le canvas */
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* La vidéo webcam (cachée mais active pour l'IA) */
+        .input_video {
+            display: none; /* L'IA lit le flux, on n'a pas besoin de la voir directement */
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Le canvas où l'on dessine les effets magiques */
+        .output_canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Remplit l'écran en conservant le ratio */
+            transform: scaleX(-1); /* Effet miroir pour que la main gauche soit à gauche */
+        }
+
+        /* UI de chargement */
+        #loading {
+            position: absolute;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            opacity: 0.8;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="loading">Chargement de l'IA... (Autorisez la caméra)</div>
+        <video class="input_video"></video>
+        <canvas class="output_canvas"></canvas>
     </div>
-</div>
+
+    <script type="module">
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        const canvasElement = document.getElementsByClassName('output_canvas')[0];
+        const canvasCtx = canvasElement.getContext('2d');
+        const loadingDiv = document.getElementById('loading');
+
+        // Définition des connexions pour tracer les "cordes" entre les doigts
+        // Nous connectons les bouts des doigts (4, 8, 12, 16, 20)
+        const CORDES_DOIGTS = [
+            [4, 8],   // Pouce -> Index
+            [8, 12],  // Index -> Majeur
+            [12, 16], // Majeur -> Annulaire
+            [16, 20], // Annulaire -> Auriculaire
+            [20, 4]   // Auriculaire -> Pouce (ferme la boucle)
+        ];
+
+        // Fonction principale de dessin des effets
+        function onResults(results) {
+            // Masquer le message de chargement une fois que l'IA répond
+            if (loadingDiv) loadingDiv.style.display = 'none';
+
+            // Ajuster la taille du canvas à la fenêtre
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Étape 1 : Dessiner l'image de la webcam en fond (optionnel, mais recommandé pour le contexte)
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            // Activer le mode "Lighter" pour que les couleurs s'additionnent et créent un effet de néon/lumière
+            canvasCtx.globalCompositeOperation = 'lighter';
+
+            // Étape 2 : Si une main est détectée, dessiner les effets
+            if (results.multiHandLandmarks) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    
+                    // -- DESSINER LES CORDES ÉLASTIQUES --
+                    canvasCtx.lineWidth = 2;
+                    for (const connection of CORDES_DOIGTS) {
+                        const from = landmarks[connection[0]];
+                        const to = landmarks[connection[1]];
+
+                        if (from && to) {
+                            // Calculer la distance pour varier l'opacité (simule la tension)
+                            const dx = (from.x - to.x) * canvasElement.width;
+                            const dy = (from.y - to.y) * canvasElement.height;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
+                            const opacity = Math.max(0.2, 1 - (dist / 500)); // Plus c'est loin, plus c'est transparent
+
+                            canvasCtx.beginPath();
+                            // Couleur dégradée Rose/Violet pour correspondre à l'image
+                            canvasCtx.strokeStyle = `hsla(300, 100%, 70%, ${opacity})`; 
+                            canvasCtx.moveTo(from.x * canvasElement.width, from.y * canvasElement.height);
+                            canvasCtx.lineTo(to.x * canvasElement.width, to.y * canvasElement.height);
+                            canvasCtx.stroke();
+                        }
+                    }
+
+                    // -- DESSINER LES POINTS LUMINEUX (Glow) --
+                    for (const landmark of landmarks) {
+                        const x = landmark.x * canvasElement.width;
+                        const y = landmark.y * canvasElement.height;
+
+                        // Dessiner le cœur du point (blanc brillant)
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(x, y, 3, 0, 2 * Math.PI);
+                        canvasCtx.fillStyle = 'white';
+                        canvasCtx.fill();
+
+                        // Dessiner l'aura lumineuse (Glow)
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(x, y, 10, 0, 2 * Math.PI);
+                        // Couleur néon Cyan/Bleu pour le glow
+                        canvasCtx.fillStyle = `hsla(180, 100%, 60%, 0.4)`; 
+                        canvasCtx.fill();
+                    }
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        // Configuration de l'IA MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        // Paramètres de détection : haute confiance pour éviter le scintillement
+        hands.setOptions({
+            maxNumHands: 2,           // Détecter jusqu'à 2 mains
+            modelComplexity: 1,       // 0=Rapide, 1=Équilibré, 2=Précis
+            minDetectionConfidence: 0.7, // Seuil de détection
+            minTrackingConfidence: 0.7   // Seuil de suivi
+        });
+
+        // Lier la fonction de dessin aux résultats de l'IA
+        hands.onResults(onResults);
+
+        // Initialiser la capture webcam
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                // Envoyer chaque frame vidéo à l'IA pour analyse
+                await hands.send({image: videoElement});
+            },
+            width: 1280,
+            height: 720
+        });
+        
+        // Démarrer la caméra
+        camera.start();
+
+    </script>
+</body>
+</html>
