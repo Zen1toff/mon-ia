@@ -2,188 +2,166 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IA Cordes Élastiques - MediaPipe</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
+    <title>Roblox Clone - Cube Buster</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #050505; /* Fond très sombre pour le contraste */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; background: #87CEEB; }
+        canvas { display: block; }
+        
+        /* Interface UI comme sur l'image */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* Laisse passer les clics vers le jeu */
         }
-
-        /* Conteneur principal pour superposer la vidéo et le canvas */
-        .container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        .stat-box {
+            position: absolute; right: 20px; top: 20px;
+            background: rgba(0,0,0,0.6); color: white; padding: 15px;
+            border-radius: 10px; border: 3px solid #000; min-width: 150px;
         }
-
-        /* La vidéo webcam (cachée mais active pour l'IA) */
-        .input_video {
-            display: none; /* L'IA lit le flux, on n'a pas besoin de la voir directement */
-            position: absolute;
-            width: 100%;
-            height: 100%;
+        .sell-zone-ui {
+            position: absolute; bottom: 50px; right: 50px;
+            width: 100px; height: 100px; background: rgba(255,0,0,0.5);
+            border: 5px solid red; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-size: 20px;
         }
-
-        /* Le canvas où l'on dessine les effets magiques */
-        .output_canvas {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            object-fit: cover; /* Remplit l'écran en conservant le ratio */
-            transform: scaleX(-1); /* Effet miroir pour que la main gauche soit à gauche */
+        #inventory-bar {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%); width: 300px; height: 30px;
+            background: #444; border: 3px solid #000; border-radius: 5px;
         }
-
-        /* UI de chargement */
-        #loading {
-            position: absolute;
-            font-size: 1.5rem;
-            text-transform: uppercase;
-            letter-spacing: 3px;
-            opacity: 0.8;
-            pointer-events: none;
+        #inventory-fill {
+            width: 0%; height: 100%; background: #4CAF50; transition: width 0.2s;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div id="loading">Chargement de l'IA... (Autorisez la caméra)</div>
-        <video class="input_video"></video>
-        <canvas class="output_canvas"></canvas>
+    <div id="ui-layer">
+        <div class="stat-box">
+            <div>CASH: <span id="cash-val">$0</span></div>
+            <div>BAG: <span id="bag-val">0/50</span></div>
+        </div>
+        <div id="inventory-bar"><div id="inventory-fill"></div></div>
+        <div class="sell-zone-ui">SELL</div>
     </div>
 
-    <script type="module">
-        const videoElement = document.getElementsByClassName('input_video')[0];
-        const canvasElement = document.getElementsByClassName('output_canvas')[0];
-        const canvasCtx = canvasElement.getContext('2d');
-        const loadingDiv = document.getElementById('loading');
+    <canvas id="gameCanvas"></canvas>
 
-        // Définition des connexions pour tracer les "cordes" entre les doigts
-        // Nous connectons les bouts des doigts (4, 8, 12, 16, 20)
-        const CORDES_DOIGTS = [
-            [4, 8],   // Pouce -> Index
-            [8, 12],  // Index -> Majeur
-            [12, 16], // Majeur -> Annulaire
-            [16, 20], // Annulaire -> Auriculaire
-            [20, 4]   // Auriculaire -> Pouce (ferme la boucle)
-        ];
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-        // Fonction principale de dessin des effets
-        function onResults(results) {
-            // Masquer le message de chargement une fois que l'IA répond
-            if (loadingDiv) loadingDiv.style.display = 'none';
+// --- CONFIGURATION ---
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-            // Ajuster la taille du canvas à la fenêtre
-            canvasElement.width = window.innerWidth;
-            canvasElement.height = window.innerHeight;
+let player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    size: 40,
+    speed: 5,
+    cash: 0,
+    bag: 0,
+    maxBag: 50
+};
 
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            
-            // Étape 1 : Dessiner l'image de la webcam en fond (optionnel, mais recommandé pour le contexte)
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+let cubes = [];
+const sellZone = { x: canvas.width - 100, y: canvas.height - 100, radius: 60 };
+const keys = {};
 
-            // Activer le mode "Lighter" pour que les couleurs s'additionnent et créent un effet de néon/lumière
-            canvasCtx.globalCompositeOperation = 'lighter';
+// Générer des cubes aléatoires
+for(let i=0; i<40; i++) {
+    spawnCube();
+}
 
-            // Étape 2 : Si une main est détectée, dessiner les effets
-            if (results.multiHandLandmarks) {
-                for (const landmarks of results.multiHandLandmarks) {
-                    
-                    // -- DESSINER LES CORDES ÉLASTIQUES --
-                    canvasCtx.lineWidth = 2;
-                    for (const connection of CORDES_DOIGTS) {
-                        const from = landmarks[connection[0]];
-                        const to = landmarks[connection[1]];
+function spawnCube() {
+    cubes.push({
+        x: Math.random() * (canvas.width - 50) + 25,
+        y: Math.random() * (canvas.height - 150) + 25,
+        color: `hsl(${Math.random() * 360}, 70%, 50%)`,
+        size: 15
+    });
+}
 
-                        if (from && to) {
-                            // Calculer la distance pour varier l'opacité (simule la tension)
-                            const dx = (from.x - to.x) * canvasElement.width;
-                            const dy = (from.y - to.y) * canvasElement.height;
-                            const dist = Math.sqrt(dx*dx + dy*dy);
-                            const opacity = Math.max(0.2, 1 - (dist / 500)); // Plus c'est loin, plus c'est transparent
+// --- LOGIQUE DE MOUVEMENT ---
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
 
-                            canvasCtx.beginPath();
-                            // Couleur dégradée Rose/Violet pour correspondre à l'image
-                            canvasCtx.strokeStyle = `hsla(300, 100%, 70%, ${opacity})`; 
-                            canvasCtx.moveTo(from.x * canvasElement.width, from.y * canvasElement.height);
-                            canvasCtx.lineTo(to.x * canvasElement.width, to.y * canvasElement.height);
-                            canvasCtx.stroke();
-                        }
-                    }
+function update() {
+    // Déplacement ZQSD ou Flèches
+    if (keys['KeyW'] || keys['ArrowUp']) player.y -= player.speed;
+    if (keys['KeyS'] || keys['ArrowDown']) player.y += player.speed;
+    if (keys['KeyA'] || keys['ArrowLeft']) player.x -= player.speed;
+    if (keys['KeyD'] || keys['ArrowRight']) player.x += player.speed;
 
-                    // -- DESSINER LES POINTS LUMINEUX (Glow) --
-                    for (const landmark of landmarks) {
-                        const x = landmark.x * canvasElement.width;
-                        const y = landmark.y * canvasElement.height;
-
-                        // Dessiner le cœur du point (blanc brillant)
-                        canvasCtx.beginPath();
-                        canvasCtx.arc(x, y, 3, 0, 2 * Math.PI);
-                        canvasCtx.fillStyle = 'white';
-                        canvasCtx.fill();
-
-                        // Dessiner l'aura lumineuse (Glow)
-                        canvasCtx.beginPath();
-                        canvasCtx.arc(x, y, 10, 0, 2 * Math.PI);
-                        // Couleur néon Cyan/Bleu pour le glow
-                        canvasCtx.fillStyle = `hsla(180, 100%, 60%, 0.4)`; 
-                        canvasCtx.fill();
-                    }
-                }
-            }
-            canvasCtx.restore();
+    // Collision avec les cubes (Collecte)
+    cubes = cubes.filter(cube => {
+        let dist = Math.hypot(player.x - cube.x, player.y - cube.y);
+        if (dist < 40 && player.bag < player.maxBag) {
+            player.bag++;
+            setTimeout(spawnCube, 2000); // Repop après 2s
+            updateUI();
+            return false;
         }
+        return true;
+    });
 
-        // Configuration de l'IA MediaPipe Hands
-        const hands = new Hands({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-            }
-        });
+    // Zone de vente
+    let distToSell = Math.hypot(player.x - sellZone.x, player.y - sellZone.y);
+    if (distToSell < sellZone.radius && player.bag > 0) {
+        player.cash += player.bag * 10;
+        player.bag = 0;
+        updateUI();
+    }
+}
 
-        // Paramètres de détection : haute confiance pour éviter le scintillement
-        hands.setOptions({
-            maxNumHands: 2,           // Détecter jusqu'à 2 mains
-            modelComplexity: 1,       // 0=Rapide, 1=Équilibré, 2=Précis
-            minDetectionConfidence: 0.7, // Seuil de détection
-            minTrackingConfidence: 0.7   // Seuil de suivi
-        });
+function updateUI() {
+    document.getElementById('cash-val').innerText = "$" + player.cash;
+    document.getElementById('bag-val').innerText = `${player.bag}/${player.maxBag}`;
+    document.getElementById('inventory-fill').style.width = (player.bag / player.maxBag * 100) + "%";
+}
 
-        // Lier la fonction de dessin aux résultats de l'IA
-        hands.onResults(onResults);
+// --- RENDU GRAPHIQUE ---
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Initialiser la capture webcam
-        const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                // Envoyer chaque frame vidéo à l'IA pour analyse
-                await hands.send({image: videoElement});
-            },
-            width: 1280,
-            height: 720
-        });
-        
-        // Démarrer la caméra
-        camera.start();
+    // Dessiner le sol (grille comme Roblox Studio)
+    ctx.strokeStyle = "#ddd";
+    for(let i=0; i<canvas.width; i+=50) {
+        ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i, canvas.height); ctx.stroke();
+    }
+    for(let i=0; i<canvas.height; i+=50) {
+        ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width, i); ctx.stroke();
+    }
 
-    </script>
+    // Dessiner la zone SELL
+    ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
+    ctx.beginPath();
+    ctx.arc(sellZone.x, sellZone.y, sellZone.radius, 0, Math.PI*2);
+    ctx.fill();
+
+    // Dessiner les cubes
+    cubes.forEach(cube => {
+        ctx.fillStyle = cube.color;
+        ctx.shadowBlur = 10; ctx.shadowColor = cube.color;
+        ctx.fillRect(cube.x, cube.y, cube.size, cube.size);
+        ctx.shadowBlur = 0;
+    });
+
+    // Dessiner le Joueur (le "Noob")
+    ctx.fillStyle = "#F5D142"; // Tête jaune
+    ctx.fillRect(player.x - 10, player.y - 25, 20, 20);
+    ctx.fillStyle = "#0055AA"; // Corps bleu
+    ctx.fillRect(player.x - 15, player.y - 5, 30, 30);
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
 </body>
 </html>
