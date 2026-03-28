@@ -2,166 +2,387 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Roblox Clone - Cube Buster</title>
+    <title>Buster Simulator 3D - Three.js</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; background: #87CEEB; }
+        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; user-select: none; }
         canvas { display: block; }
-        
-        /* Interface UI comme sur l'image */
+
+        /* --- INTERFACE UTILISATEUR (GUI) --- */
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; /* Laisse passer les clics vers le jeu */
+            z-index: 10;
         }
+
+        /* En-tête Leaderstat */
         .stat-box {
             position: absolute; right: 20px; top: 20px;
             background: rgba(0,0,0,0.6); color: white; padding: 15px;
-            border-radius: 10px; border: 3px solid #000; min-width: 150px;
+            border-radius: 10px; border: 3px solid #000; min-width: 180px;
         }
-        .sell-zone-ui {
-            position: absolute; bottom: 50px; right: 50px;
-            width: 100px; height: 100px; background: rgba(255,0,0,0.5);
-            border: 5px solid red; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: bold; font-size: 20px;
-        }
+        .leaderstat-header { font-weight: bold; text-align: center; border-bottom: 2px solid white; margin-bottom: 5px; }
+        .stat-item { display: flex; justify-content: space-between; font-size: 1.1em; }
+
+        /* Barre d'inventaire */
         #inventory-bar {
             position: absolute; bottom: 20px; left: 50%;
-            transform: translateX(-50%); width: 300px; height: 30px;
-            background: #444; border: 3px solid #000; border-radius: 5px;
+            transform: translateX(-50%); width: 350px; height: 35px;
+            background: #444; border: 4px solid #000; border-radius: 8px;
+            overflow: hidden;
         }
         #inventory-fill {
-            width: 0%; height: 100%; background: #4CAF50; transition: width 0.2s;
+            width: 0%; height: 100%; background: #4CAF50; transition: width 0.1s linear;
         }
+
+        /* Zone de vente */
+        .sell-zone-ui {
+            position: absolute; bottom: 50px; right: 50px;
+            width: 120px; height: 120px; background: rgba(255,0,0,0.5);
+            border: 6px solid red; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-size: 24px;
+        }
+
+        /* Shop (Simple placeholders) */
+        .shop-box {
+            position: absolute; left: 20px; bottom: 20px;
+            background: rgba(0,0,0,0.6); border: 3px solid #000; padding: 10px; border-radius: 10px;
+            display: flex; gap: 10px;
+        }
+        .shop-icon { width: 60px; height: 60px; background: #333; border: 2px solid #fff; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; }
     </style>
 </head>
 <body>
 
     <div id="ui-layer">
         <div class="stat-box">
-            <div>CASH: <span id="cash-val">$0</span></div>
-            <div>BAG: <span id="bag-val">0/50</span></div>
+            <div class="leaderstat-header">LEADERSTAT</div>
+            <div class="stat-item"><span>CASH:</span> <span id="cash-val">$0</span></div>
+            <div class="stat-item"><span>BAG:</span> <span id="bag-val">0/100</span></div>
         </div>
         <div id="inventory-bar"><div id="inventory-fill"></div></div>
         <div class="sell-zone-ui">SELL</div>
+        <div class="shop-box">
+            <div class="shop-icon">ASPIRATOR</div>
+            <div class="shop-icon">BAG</div>
+            <div class="shop-icon">SPEED</div>
+        </div>
     </div>
 
-    <canvas id="gameCanvas"></canvas>
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+        import { OrbitControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/OrbitControls.js';
 
-<script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+        let scene, camera, renderer, controls;
+        let player, playerBody, aspiratorModel, particleSystem;
+        let cubes = [];
+        const keys = {};
 
-// --- CONFIGURATION ---
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+        // Config Jeu
+        const gameConfig = {
+            player: { cash: 0, bag: 0, maxBag: 100, speed: 0.15 },
+            sellZone: { x: 20, z: 20, radius: 5 },
+            suckRange: 8 // Portée d'aspiration
+        };
 
-let player = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    size: 40,
-    speed: 5,
-    cash: 0,
-    bag: 0,
-    maxBag: 50
-};
+        init();
+        animate();
 
-let cubes = [];
-const sellZone = { x: canvas.width - 100, y: canvas.height - 100, radius: 60 };
-const keys = {};
+        function init() {
+            // --- SCENE & RENDERER ---
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Ciel bleu
+            scene.fog = new THREE.Fog(0x87CEEB, 20, 100);
 
-// Générer des cubes aléatoires
-for(let i=0; i<40; i++) {
-    spawnCube();
-}
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
 
-function spawnCube() {
-    cubes.push({
-        x: Math.random() * (canvas.width - 50) + 25,
-        y: Math.random() * (canvas.height - 150) + 25,
-        color: `hsl(${Math.random() * 360}, 70%, 50%)`,
-        size: 15
-    });
-}
+            // --- CAMERA ---
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(-15, 10, -15); // Vue de dos/côté comme Roblox
 
-// --- LOGIQUE DE MOUVEMENT ---
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
+            // --- LUMIERES ---
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
 
-function update() {
-    // Déplacement ZQSD ou Flèches
-    if (keys['KeyW'] || keys['ArrowUp']) player.y -= player.speed;
-    if (keys['KeyS'] || keys['ArrowDown']) player.y += player.speed;
-    if (keys['KeyA'] || keys['ArrowLeft']) player.x -= player.speed;
-    if (keys['KeyD'] || keys['ArrowRight']) player.x += player.speed;
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
 
-    // Collision avec les cubes (Collecte)
-    cubes = cubes.filter(cube => {
-        let dist = Math.hypot(player.x - cube.x, player.y - cube.y);
-        if (dist < 40 && player.bag < player.maxBag) {
-            player.bag++;
-            setTimeout(spawnCube, 2000); // Repop après 2s
-            updateUI();
-            return false;
+            // --- CONTROLES (Caméra) ---
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enablePan = false;
+            controls.enableDamping = true;
+            controls.minDistance = 5;
+            controls.maxDistance = 30;
+
+            // --- LE SOL ---
+            const groundGeo = new THREE.PlaneGeometry(100, 100, 20, 20);
+            const groundMat = new THREE.MeshPhongMaterial({ color: 0x999999 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Grille au sol
+            const gridHelper = new THREE.GridHelper(100, 20, 0x555555, 0x555555);
+            scene.add(gridHelper);
+
+            // --- LE JOUEUR (Modèle "Noob") ---
+            player = new THREE.Group();
+            
+            // Corps (Bleu)
+            const torsoGeo = new THREE.BoxGeometry(1.2, 1.2, 0.6);
+            const torsoMat = new THREE.MeshPhongMaterial({ color: 0x0055AA });
+            playerBody = new THREE.Mesh(torsoGeo, torsoMat);
+            playerBody.castShadow = true;
+            player.add(playerBody);
+
+            // Tête (Jaune)
+            const headGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            const headMat = new THREE.MeshPhongMaterial({ color: 0xF5D142 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.0;
+            head.castShadow = true;
+            player.add(head);
+
+            // --- L'OUTIL (Buster 1000) ---
+            aspiratorModel = new THREE.Group();
+            aspiratorModel.name = "BusterTool";
+            
+            const handleGeo = new THREE.CylinderGeometry(0.1, 0.1, 1);
+            const handleMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+            const handle = new THREE.Mesh(handleGeo, handleMat);
+            aspiratorModel.add(handle);
+
+            // Embout lumineux
+            const nozzleGeo = new THREE.CylinderGeometry(0.3, 0.2, 0.6);
+            const nozzleMat = new THREE.MeshPhongMaterial({ 
+                color: 0xff4400, // Orange
+                emissive: 0xff2200, 
+                emissiveIntensity: 2 
+            });
+            const nozzle = new THREE.Mesh(nozzleGeo, nozzleMat);
+            nozzle.position.y = 0.8;
+            aspiratorModel.add(nozzle);
+
+            // Point lumineux (Lumière réelle)
+            const nozzleLight = new THREE.PointLight(0xff4400, 1, 5);
+            nozzle.add(nozzleLight);
+
+            aspiratorModel.rotation.x = Math.PI / 2; // Orienter vers l'avant
+            aspiratorModel.position.set(0.8, -0.2, 0.5); // Placer dans la "main" droite
+            player.add(aspiratorModel);
+            
+            player.position.y = 0.6; // Soulever le corps
+            scene.add(player);
+
+            // --- SYSTEME DE PARTICULES (Aspiration bleue) ---
+            const particlesGeo = new THREE.BufferGeometry();
+            const particlesCount = 200;
+            const positions = new Float32Array(particlesCount * 3);
+            const velocities = new Float32Array(particlesCount * 3);
+            const colors = new Float32Array(particlesCount * 3);
+
+            for(let i=0; i < particlesCount * 3; i+=3) {
+                // Initialement cachés
+                positions[i] = 1000; positions[i+1] = 1000; positions[i+2] = 1000;
+                // Vitesse vers l'arrière
+                velocities[i] = 0; velocities[i+1] = (Math.random() - 0.5) * 0.1; velocities[i+2] = (Math.random() - 0.5) * 0.1;
+                // Bleu brillant
+                colors[i] = 0.1; colors[i+1] = 0.6; colors[i+2] = 1.0;
+            }
+            particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particlesGeo.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+            particlesGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const particlesMat = new THREE.PointsMaterial({ 
+                size: 0.15, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false 
+            });
+            particleSystem = new THREE.Points(particlesGeo, particlesMat);
+            scene.add(particleSystem);
+
+
+            // --- ZONE DE VENTE (SELL) ---
+            const sellZoneGeo = new THREE.CylinderGeometry(gameConfig.sellZone.radius, gameConfig.sellZone.radius, 0.1, 32);
+            const sellZoneMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3 });
+            const sellZoneMesh = new THREE.Mesh(sellZoneGeo, sellZoneMat);
+            sellZoneMesh.position.set(gameConfig.sellZone.x, 0.05, gameConfig.sellZone.z);
+            scene.add(sellZoneMesh);
+
+            // Anneau de bord
+            const sellRingGeo = new THREE.RingGeometry(gameConfig.sellZone.radius - 0.2, gameConfig.sellZone.radius, 32);
+            const sellRingMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const sellRing = new THREE.Mesh(sellRingGeo, sellRingMat);
+            sellRing.rotation.x = -Math.PI / 2;
+            sellRing.position.y = 0.1;
+            sellRingMesh.add(sellRing);
+
+
+            // --- SPAWN INITIAL DES CUBES ---
+            for(let i=0; i<60; i++) { spawnCube(); }
+
+            // --- EVENTS ---
+            window.addEventListener('keydown', e => keys[e.code] = true);
+            window.addEventListener('keyup', e => keys[e.code] = false);
+            window.addEventListener('resize', onWindowResize, false);
         }
-        return true;
-    });
 
-    // Zone de vente
-    let distToSell = Math.hypot(player.x - sellZone.x, player.y - sellZone.y);
-    if (distToSell < sellZone.radius && player.bag > 0) {
-        player.cash += player.bag * 10;
-        player.bag = 0;
-        updateUI();
-    }
-}
+        // --- SPAWN DES CUBES COLORÉS BRYANTS ---
+        function spawnCube() {
+            const cubeGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+            const color = new THREE.Color(`hsl(${Math.random() * 360}, 100%, 50%)`);
+            const cubeMat = new THREE.MeshPhongMaterial({ 
+                color: color, 
+                emissive: color, 
+                emissiveIntensity: 0.5 // Brillance comme sur l'image
+            });
+            const cube = new THREE.Mesh(cubeGeo, cubeMat);
+            cube.castShadow = true;
+            cube.receiveShadow = true;
+            
+            // Placer aléatoirement mais pas trop près de la zone SELL
+            let x, z;
+            do {
+                x = (Math.random() - 0.5) * 80;
+                z = (Math.random() - 0.5) * 80;
+            } while (Math.sqrt(Math.pow(x - gameConfig.sellZone.x, 2) + Math.pow(z - gameConfig.sellZone.z, 2)) < gameConfig.sellZone.radius + 5);
 
-function updateUI() {
-    document.getElementById('cash-val').innerText = "$" + player.cash;
-    document.getElementById('bag-val').innerText = `${player.bag}/${player.maxBag}`;
-    document.getElementById('inventory-fill').style.width = (player.bag / player.maxBag * 100) + "%";
-}
+            cube.position.set(x, 0.2, z);
+            cube.userData = { originalPosition: cube.position.clone(), isBeingSucked: false, speed: 0 };
+            
+            scene.add(cube);
+            cubes.push(cube);
+        }
 
-// --- RENDU GRAPHIQUE ---
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // --- LOGIQUE DE JEU (A CHAQUE FRAME) ---
+        function updateLogic() {
+            // Mouvement du joueur (Basé sur la caméra)
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0; forward.normalize();
+            
+            const right = new THREE.Vector3();
+            right.crossVectors(camera.up, forward).normalize();
 
-    // Dessiner le sol (grille comme Roblox Studio)
-    ctx.strokeStyle = "#ddd";
-    for(let i=0; i<canvas.width; i+=50) {
-        ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i, canvas.height); ctx.stroke();
-    }
-    for(let i=0; i<canvas.height; i+=50) {
-        ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width, i); ctx.stroke();
-    }
+            let moving = false;
+            if (keys['KeyW'] || keys['ArrowUp']) { player.position.addScaledVector(forward, -gameConfig.player.speed); moving = true; }
+            if (keys['KeyS'] || keys['ArrowDown']) { player.position.addScaledVector(forward, gameConfig.player.speed); moving = true; }
+            if (keys['KeyA'] || keys['ArrowLeft']) { player.position.addScaledVector(right, -gameConfig.player.speed); moving = true; }
+            if (keys['KeyD'] || keys['ArrowRight']) { player.position.addScaledVector(right, gameConfig.player.speed); moving = true; }
 
-    // Dessiner la zone SELL
-    ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-    ctx.beginPath();
-    ctx.arc(sellZone.x, sellZone.y, sellZone.radius, 0, Math.PI*2);
-    ctx.fill();
+            // Orienter le joueur dans la direction du mouvement
+            if (moving) {
+                const moveDirection = new THREE.Vector3(forward.x, 0, forward.z);
+                // Calculer l'angle cible
+                let targetAngle = Math.atan2(forward.x, forward.z); 
+                // Ajouter l'ajustement pour les touches directionnelles latérale
+                if (keys['KeyA']) targetAngle += Math.PI/2;
+                if (keys['KeyD']) targetAngle -= Math.PI/2;
+                if (keys['KeyS']) targetAngle += Math.PI;
+                player.rotation.y = targetAngle;
+            }
 
-    // Dessiner les cubes
-    cubes.forEach(cube => {
-        ctx.fillStyle = cube.color;
-        ctx.shadowBlur = 10; ctx.shadowColor = cube.color;
-        ctx.fillRect(cube.x, cube.y, cube.size, cube.size);
-        ctx.shadowBlur = 0;
-    });
+            // --- LOGIQUE D'ASPIRATION DES CUBES ---
+            const nozzleWorldPos = new THREE.Vector3();
+            aspiratorModel.children[1].getWorldPosition(nozzleWorldPos); // Position de l'embout
+            
+            cubes.forEach((cube, index) => {
+                if (cube.userData.isBeingSucked) {
+                    // Le cube vole vers l'aspirateur
+                    cube.position.lerp(nozzleWorldPos, 0.2);
+                    cube.scale.multiplyScalar(0.92); // Rétrecit
+                    
+                    // Quand il atteint l'embout
+                    if (cube.position.distanceTo(nozzleWorldPos) < 0.3) {
+                        gameConfig.player.bag++;
+                        updateUI();
+                        scene.remove(cube);
+                        cubes.splice(index, 1);
+                        setTimeout(spawnCube, 5000); // Repop après 5s
+                    }
+                } else {
+                    // Vérifier si le sac est plein
+                    if (gameConfig.player.bag >= gameConfig.player.maxBag) return;
 
-    // Dessiner le Joueur (le "Noob")
-    ctx.fillStyle = "#F5D142"; // Tête jaune
-    ctx.fillRect(player.x - 10, player.y - 25, 20, 20);
-    ctx.fillStyle = "#0055AA"; // Corps bleu
-    ctx.fillRect(player.x - 15, player.y - 5, 30, 30);
-}
+                    // Distance entre le cube et l'embout de l'aspirateur
+                    const distToNozzle = cube.position.distanceTo(nozzleWorldPos);
+                    if (distToNozzle < gameConfig.suckRange) {
+                        cube.userData.isBeingSucked = true;
+                    }
+                }
+            });
 
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
+            // --- EFFET DE PARTICULES (Arc bleu) ---
+            updateParticles(nozzleWorldPos, moving);
 
-gameLoop();
-</script>
+            // --- ZONE DE VENTE (SELL) ---
+            const distToSell = player.position.distanceTo(new THREE.Vector3(gameConfig.sellZone.x, player.position.y, gameConfig.sellZone.z));
+            if (distToSell < gameConfig.sellZone.radius && gameConfig.player.bag > 0) {
+                gameConfig.player.cash += gameConfig.player.bag * 10;
+                gameConfig.player.bag = 0;
+                updateUI();
+            }
+        }
+
+        // --- GESTION DES PARTICULES BLEUES ---
+        function updateParticles(origin, playerMoving) {
+            const positions = particleSystem.geometry.attributes.position.array;
+            const velocities = particleSystem.geometry.attributes.velocity.array;
+
+            for(let i=0; i < positions.length; i+=3) {
+                // Si la particule est trop loin (morte)
+                if (Math.abs(positions[i] - origin.x) > 10 || positions[i] > 999) {
+                    // Spawn à l'embout, un peu aléatoire
+                    positions[i] = origin.x + (Math.random()-0.5) * 0.2;
+                    positions[i+1] = origin.y + (Math.random()-0.5) * 0.2;
+                    positions[i+2] = origin.z + (Math.random()-0.5) * 0.2;
+                    // Vitesse vers l'arrière
+                    velocities[i] = (Math.random()-0.5)*0.1;
+                    velocities[i+1] = (Math.random()-0.5)*0.1;
+                    velocities[i+2] = -0.2 - Math.random()*0.1;
+                }
+                
+                // Mouvement
+                positions[i] += velocities[i];
+                positions[i+1] += velocities[i+1];
+                positions[i+2] += velocities[i+2];
+                // Gravité légère
+                velocities[i+1] -= 0.002;
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            // Orienter le système de particules avec le joueur
+            particleSystem.rotation.y = player.rotation.y;
+            particleSystem.position.set(origin.x, origin.y, origin.z); // Suivre l'aspirateur
+        }
+
+        // --- MISE A JOUR DE L'UI ---
+        function updateUI() {
+            document.getElementById('cash-val').innerText = "$" + gameConfig.player.cash.toLocaleString();
+            document.getElementById('bag-val').innerText = `${gameConfig.player.bag}/${gameConfig.player.maxBag}`;
+            
+            const fillRatio = gameConfig.player.bag / gameConfig.player.maxBag;
+            document.getElementById('inventory-fill').style.width = (fillRatio * 100) + "%";
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- BOUCLE DE RENDU ---
+        function animate() {
+            requestAnimationFrame(animate);
+            updateLogic();
+            controls.update(); // Damping de la caméra
+            renderer.render(scene, camera);
+        }
+    </script>
 </body>
 </html>
