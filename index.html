@@ -3,105 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>ASTRO_RECON_V4</title>
+    <title>ASTRO_STABLE_V5</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     
     <style>
-        body { margin: 0; background: #000; font-family: monospace; color: #00ff41; }
-        #hud { position: fixed; top: 10px; left: 10px; z-index: 1000; background: rgba(0,20,0,0.8); padding: 10px; border: 1px solid #00ff41; font-size: 10px; }
-        #guide { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 500; font-size: 12px; text-align: center; pointer-events: none; }
-        #launch { position: fixed; inset: 0; z-index: 2000; background: #000; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 4px solid #00ff41; }
+        body { margin: 0; background: #000; font-family: monospace; color: #00ff41; overflow: hidden; }
+        #hud { position: fixed; top: 10px; left: 10px; z-index: 1000; background: rgba(0,20,0,0.8); padding: 10px; border: 1px solid #00ff41; font-size: 9px; line-height: 1.4; }
+        #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border: 1px solid rgba(0,255,65,0.5); border-radius: 50%; z-index: 500; pointer-events: none; }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ff41; }
+        #crosshair::before { top: 50%; left: -5px; width: 10px; height: 1px; }
+        #crosshair::after { left: 50%; top: -5px; width: 1px; height: 10px; }
+        #boot-screen { position: fixed; inset: 0; z-index: 2000; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid #00ff41; }
+        .scan-line { width: 100%; height: 2px; background: rgba(0,255,65,0.3); position: absolute; animation: scan 3s infinite; }
+        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
     </style>
 </head>
 <body>
 
-    <div id="launch" onclick="boot()"><h1>[ INITIALIZE_ASTRO_SCAN ]</h1></div>
+    <div id="boot-screen" onclick="start()">
+        <div class="scan-line"></div>
+        <h2 style="letter-spacing: 3px;">[ SYSTEM_READY ]</h2>
+        <p>TAP TO CALIBRATE & DEPLOY</p>
+    </div>
 
     <div id="hud">
-        > GPS: <span id="st-gps">WAITING</span><br>
-        > SUN_ALT: <span id="sun-alt">--</span>°<br>
-        > MOON_ALT: <span id="moon-alt">--</span>°
+        > LOG_STATUS: STABLE<br>
+        > GYRO_COMPENSATION: ACTIVE<br>
+        > SUN_POS: <span id="s-p">--</span><br>
+        > MOON_POS: <span id="m-p">--</span>
     </div>
 
-    <div id="guide">
-        <div id="arrow-sun">SÉLECTIONNER CIBLE...</div>
-    </div>
+    <div id="crosshair"></div>
 
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-        <a-entity id="sky">
-            <a-sphere id="sun" radius="8" color="#FFD700" material="shader:flat">
-                <a-text value="SUN" align="center" position="0 -10 0" scale="15 15 15" color="yellow"></a-text>
-            </a-sphere>
+        <a-entity id="world-root">
+            <a-entity id="sun" geometry="primitive: sphere; radius: 5" material="color: #ffaa00; shader: flat; emissive: #ffaa00">
+                <a-text value="SUN" align="center" position="0 -8 0" scale="12 12 12" color="#00ff41"></a-text>
+            </a-entity>
             
-            <a-sphere id="moon" radius="6" material="src: https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/space/moon_1024.jpg;">
-                <a-text value="MOON" align="center" position="0 -8 0" scale="12 12 12" color="white"></a-text>
-            </a-sphere>
+            <a-entity id="moon" geometry="primitive: sphere; radius: 4" material="src: https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/planets/moon_1024.jpg">
+                <a-text value="MOON" align="center" position="0 -7 0" scale="10 10 10" color="#fff"></a-text>
+            </a-entity>
 
-            <a-entity id="stars"></a-entity>
+            <a-grid position="0 -1.6 0" rotation="-90 0 0" material="color: #00ff41; opacity: 0.1; wireframe: true"></a-grid>
         </a-entity>
-        <a-camera id="cam" rotation-reader></a-camera>
+
+        <a-camera id="main-cam" rotation-reader look-controls="magicWindowTrackingEnabled: true"></a-camera>
     </a-scene>
 
     <script>
-        const sunAltTxt = document.getElementById('sun-alt');
-        const moonAltTxt = document.getElementById('moon-alt');
-        const guide = document.getElementById('arrow-sun');
+        let lat, lon;
+        const root = document.getElementById('world-root');
 
-        async function boot() {
-            document.getElementById('launch').style.display = 'none';
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                await DeviceOrientationEvent.requestPermission();
-            }
+        async function start() {
+            document.getElementById('boot-screen').style.display = 'none';
             
+            // Autorisation Orientation (Crucial pour le lissage)
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission !== 'granted') return alert("Capteurs bloqués.");
+            }
+
             navigator.geolocation.getCurrentPosition(pos => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                document.getElementById('st-gps').innerText = "LOCKED";
-                
-                // Création d'étoiles de repère
-                const starsCont = document.getElementById('stars');
-                for(let i=0; i<50; i++) {
-                    let s = document.createElement('a-sphere');
-                    let az = Math.random() * Math.PI * 2;
-                    let al = Math.random() * Math.PI;
-                    let x = 100 * Math.cos(al) * Math.sin(az);
-                    let y = 100 * Math.sin(al);
-                    let z = -100 * Math.cos(al) * Math.cos(az);
-                    s.setAttribute('position', `${x} ${y} ${z}`);
-                    s.setAttribute('radius', '0.5');
-                    s.setAttribute('color', 'white');
-                    starsCont.appendChild(s);
-                }
-
-                setInterval(() => {
-                    const now = new Date();
-                    const sun = SunCalc.getPosition(now, lat, lon);
-                    const moon = SunCalc.getMoonPosition(now, lat, lon);
-
-                    updateObj('sun', sun.azimuth, sun.altitude, 150);
-                    updateObj('moon', moon.azimuth, moon.altitude, 120);
-
-                    sunAltTxt.innerText = Math.round(sun.altitude * 57.29);
-                    moonAltTxt.innerText = Math.round(moon.altitude * 57.29);
-
-                    // Aide visuelle pour trouver la lune
-                    let mAlt = sun.altitude * 57.29;
-                    if (mAlt < 0) {
-                        guide.innerHTML = "SOLAIRE: SOUS L'HORIZON<br>TOURNEZ POUR CHERCHER LES ÉTOILES";
-                    } else {
-                        guide.innerHTML = "CIBLE DÉTECTÉE<br>SCANNEZ LE CIEL";
-                    }
-                }, 1000);
+                lat = pos.coords.latitude;
+                lon = pos.coords.longitude;
+                updatePositions();
+                setInterval(updatePositions, 5000); // MaJ astro toutes les 5s
             });
         }
 
-        function updateObj(id, az, alt, dist) {
+        function updatePositions() {
+            if(!lat) return;
+            const now = new Date();
+            const sun = SunCalc.getPosition(now, lat, lon);
+            const moon = SunCalc.getMoonPosition(now, lat, lon);
+
+            setPos('sun', sun.azimuth, sun.altitude, 120);
+            setPos('moon', moon.azimuth, moon.altitude, 100);
+
+            document.getElementById('s-p').innerText = `${Math.round(sun.altitude*57.3)}°`;
+            document.getElementById('m-p').innerText = `${Math.round(moon.altitude*57.3)}°`;
+        }
+
+        function setPos(id, az, alt, dist) {
             const el = document.getElementById(id);
-            const x = dist * Math.cos(alt) * Math.sin(az);
+            // Inversion de l'azimuth pour correspondre au repère A-Frame (Sud = 0)
+            const adjustedAz = az + Math.PI; 
+            
+            const x = dist * Math.cos(alt) * Math.sin(adjustedAz);
             const y = dist * Math.sin(alt);
-            const z = -dist * Math.cos(alt) * Math.cos(az);
+            const z = dist * Math.cos(alt) * Math.cos(adjustedAz);
+            
             el.setAttribute('position', `${x} ${y} ${z}`);
         }
     </script>
