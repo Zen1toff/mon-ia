@@ -2,55 +2,94 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>ASTRO_RECON // LIVE_FEED</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ASTRO_RECON_V1</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    
     <style>
-        #hud-data {
-            position: fixed; bottom: 20px; left: 20px; color: #00ff41;
-            font-family: monospace; z-index: 100; background: rgba(0,0,0,0.7); padding: 10px;
-            border-left: 3px solid #00ff41;
-        }
+        #ui { position: fixed; inset: 0; pointer-events: none; z-index: 100; font-family: monospace; color: #00ff41; padding: 20px; }
+        .data-box { background: rgba(0,20,0,0.7); border-left: 3px solid #00ff41; padding: 10px; margin-bottom: 10px; font-size: 10px; }
+        #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     </style>
 </head>
 <body style="margin: 0; overflow: hidden;">
 
-    <div id="hud-data">
-        > GPS_LINK: ACTIVE<br>
-        > TARGET: MOON_PHASE_0.8<br>
-        > ORIENTATION: <span id="deg">0</span>°
+    <div id="overlay" onclick="startApp()"><h1>> INITIALIZE_ASTRO_LINK</h1></div>
+
+    <div id="ui">
+        <div class="data-box">
+            [ COORDINATES ]<br>
+            LAT: <span id="lat">--</span><br>
+            LON: <span id="lon">--</span>
+        </div>
+        <div class="data-box">
+            [ CELESTIAL_OBJECTS ]<br>
+            SUN: <span id="sun-pos">CALCULATING...</span><br>
+            MOON: <span id="moon-pos">CALCULATING...</span>
+        </div>
     </div>
 
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-        
-        <a-sphere id="moon" 
-                  material="src: https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/space/moon_1024.jpg;"
-                  radius="5"
-                  position="0 20 -50"
-                  animation="property: rotation; to: 0 360 0; loop: true; dur: 10000">
-            <a-text value="MOON // DIST: 384,400 KM" align="center" position="0 -7 0" color="#00ff41"></a-text>
-        </a-sphere>
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+        <a-entity id="sky-map">
+            <a-sphere id="sun-obj" radius="2" color="yellow" material="shader: flat;"></a-sphere>
+            
+            <a-sphere id="moon-obj" radius="1.5" material="src: https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/space/moon_1024.jpg;"></a-sphere>
+        </a-entity>
 
-        <a-sphere id="sun" 
-                  color="yellow" 
-                  radius="10" 
-                  position="100 50 100"
-                  material="shader: flat; fog: false">
-            <a-light type="point" intensity="2" distance="1000"></a-light>
-        </a-sphere>
-
-        <a-camera gps-camera rotation-reader></a-camera>
-
+        <a-camera rotation-reader></a-camera>
     </a-scene>
 
     <script>
-        // On récupère l'angle de rotation pour le HUD
-        window.addEventListener('deviceorientation', (event) => {
-            document.getElementById('deg').innerText = Math.round(event.alpha);
-        });
+        let lat, lon;
 
-        // Ici, on pourrait ajouter une API comme 'SunCalc' 
-        // pour positionner la lune et le soleil dynamiquement
+        function startApp() {
+            document.getElementById('overlay').style.display = 'none';
+            
+            // Demander l'autorisation pour l'iPhone (iOS 13+)
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission();
+            }
+
+            // 1. Obtenir le GPS
+            navigator.geolocation.getCurrentPosition(pos => {
+                lat = pos.coords.latitude;
+                lon = pos.coords.longitude;
+                document.getElementById('lat').innerText = lat.toFixed(4);
+                document.getElementById('lon').innerText = lon.toFixed(4);
+                updateAstro();
+            });
+        }
+
+        function updateAstro() {
+            const now = new Date();
+            
+            // Calcul Soleil
+            const sun = SunCalc.getPosition(now, lat, lon);
+            const sunEl = document.getElementById('sun-obj');
+            posToVisual(sun.azimuth, sun.altitude, sunEl, 100);
+            document.getElementById('sun-pos').innerText = `AZ: ${toDeg(sun.azimuth)}° ALT: ${toDeg(sun.altitude)}°`;
+
+            // Calcul Lune
+            const moon = SunCalc.getMoonPosition(now, lat, lon);
+            const moonEl = document.getElementById('moon-obj');
+            posToVisual(moon.azimuth, moon.altitude, moonEl, 80);
+            document.getElementById('moon-pos').innerText = `AZ: ${toDeg(moon.azimuth)}° ALT: ${toDeg(moon.altitude)}°`;
+
+            setTimeout(updateAstro, 30000); // Mise à jour toutes les 30s
+        }
+
+        // Convertir les coordonnées Astro en position 3D (X, Y, Z)
+        function posToVisual(az, alt, element, distance) {
+            // Conversion coordonnées sphériques en cartésiennes
+            const x = distance * Math.cos(alt) * Math.sin(az);
+            const y = distance * Math.sin(alt);
+            const z = -distance * Math.cos(alt) * Math.cos(az);
+            element.setAttribute('position', `${x} ${y} ${z}`);
+        }
+
+        function toDeg(rad) { return Math.round(rad * (180 / Math.PI)); }
     </script>
 </body>
 </html>
