@@ -3,93 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>ASTRO_RECON_V1</title>
+    <title>ASTRO_FIX_v2</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     
     <style>
-        #ui { position: fixed; inset: 0; pointer-events: none; z-index: 100; font-family: monospace; color: #00ff41; padding: 20px; }
-        .data-box { background: rgba(0,20,0,0.7); border-left: 3px solid #00ff41; padding: 10px; margin-bottom: 10px; font-size: 10px; }
-        #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        body { margin: 0; background: #000; font-family: monospace; color: #00ff41; }
+        #debug-console { position: fixed; top: 10px; left: 10px; z-index: 1000; font-size: 10px; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #00ff41; pointer-events: none; }
+        #btn-start { position: fixed; inset: 0; z-index: 2000; background: #000; color: #00ff41; border: 4px solid #00ff41; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; }
     </style>
 </head>
-<body style="margin: 0; overflow: hidden;">
+<body>
 
-    <div id="overlay" onclick="startApp()"><h1>> INITIALIZE_ASTRO_LINK</h1></div>
+    <div id="btn-start" onclick="initSystem()">
+        CLIQUE ICI POUR<br>DÉPLOYER L'ANALYSEUR
+    </div>
 
-    <div id="ui">
-        <div class="data-box">
-            [ COORDINATES ]<br>
-            LAT: <span id="lat">--</span><br>
-            LON: <span id="lon">--</span>
-        </div>
-        <div class="data-box">
-            [ CELESTIAL_OBJECTS ]<br>
-            SUN: <span id="sun-pos">CALCULATING...</span><br>
-            MOON: <span id="moon-pos">CALCULATING...</span>
-        </div>
+    <div id="debug-console">
+        > SYSTEM_BOOT...<br>
+        > WAITING_FOR_USER_ACTION...
     </div>
 
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
         <a-entity id="sky-map">
-            <a-sphere id="sun-obj" radius="2" color="yellow" material="shader: flat;"></a-sphere>
-            
-            <a-sphere id="moon-obj" radius="1.5" material="src: https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/space/moon_1024.jpg;"></a-sphere>
+            <a-sphere id="sun-obj" radius="4" color="yellow" material="shader: flat;"></a-sphere>
+            <a-sphere id="moon-obj" radius="3" material="src: https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/space/moon_1024.jpg;"></a-sphere>
         </a-entity>
-
         <a-camera rotation-reader></a-camera>
     </a-scene>
 
     <script>
-        let lat, lon;
+        const log = (msg) => { document.getElementById('debug-console').innerHTML += `<br>> ${msg}`; };
 
-        function startApp() {
-            document.getElementById('overlay').style.display = 'none';
-            
-            // Demander l'autorisation pour l'iPhone (iOS 13+)
+        async function initSystem() {
+            document.getElementById('btn-start').style.display = 'none';
+            log("INITIALIZING...");
+
+            // 1. Autoriser l'orientation (iPhone)
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission();
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    log("PERMISSION_ORIENTATION: " + permission);
+                } catch (e) { log("ERR_ORIENTATION: " + e); }
             }
 
-            // 1. Obtenir le GPS
-            navigator.geolocation.getCurrentPosition(pos => {
-                lat = pos.coords.latitude;
-                lon = pos.coords.longitude;
-                document.getElementById('lat').innerText = lat.toFixed(4);
-                document.getElementById('lon').innerText = lon.toFixed(4);
-                updateAstro();
-            });
+            // 2. Lancer le GPS
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    log(`GPS_FIX: ${lat.toFixed(2)}, ${lon.toFixed(2)}`);
+                    startAstro(lat, lon);
+                },
+                (err) => { log("ERR_GPS: " + err.message); },
+                { enableHighAccuracy: true }
+            );
         }
 
-        function updateAstro() {
-            const now = new Date();
-            
-            // Calcul Soleil
-            const sun = SunCalc.getPosition(now, lat, lon);
-            const sunEl = document.getElementById('sun-obj');
-            posToVisual(sun.azimuth, sun.altitude, sunEl, 100);
-            document.getElementById('sun-pos').innerText = `AZ: ${toDeg(sun.azimuth)}° ALT: ${toDeg(sun.altitude)}°`;
+        function startAstro(lat, lon) {
+            setInterval(() => {
+                const now = new Date();
+                const sun = SunCalc.getPosition(now, lat, lon);
+                const moon = SunCalc.getMoonPosition(now, lat, lon);
 
-            // Calcul Lune
-            const moon = SunCalc.getMoonPosition(now, lat, lon);
-            const moonEl = document.getElementById('moon-obj');
-            posToVisual(moon.azimuth, moon.altitude, moonEl, 80);
-            document.getElementById('moon-pos').innerText = `AZ: ${toDeg(moon.azimuth)}° ALT: ${toDeg(moon.altitude)}°`;
-
-            setTimeout(updateAstro, 30000); // Mise à jour toutes les 30s
+                updatePos('sun-obj', sun.azimuth, sun.altitude, 50);
+                updatePos('moon-obj', moon.azimuth, moon.altitude, 40);
+                log("ASTRO_UPDATE_SUCCESS");
+            }, 2000);
         }
 
-        // Convertir les coordonnées Astro en position 3D (X, Y, Z)
-        function posToVisual(az, alt, element, distance) {
-            // Conversion coordonnées sphériques en cartésiennes
-            const x = distance * Math.cos(alt) * Math.sin(az);
-            const y = distance * Math.sin(alt);
-            const z = -distance * Math.cos(alt) * Math.cos(az);
-            element.setAttribute('position', `${x} ${y} ${z}`);
+        function updatePos(id, az, alt, dist) {
+            const el = document.getElementById(id);
+            const x = dist * Math.cos(alt) * Math.sin(az);
+            const y = dist * Math.sin(alt);
+            const z = -dist * Math.cos(alt) * Math.cos(az);
+            el.setAttribute('position', `${x} ${y} ${z}`);
         }
-
-        function toDeg(rad) { return Math.round(rad * (180 / Math.PI)); }
     </script>
 </body>
 </html>
