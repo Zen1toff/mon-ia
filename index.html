@@ -3,308 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dragon Gold Casino</title>
+    <title>Interface Dragon Slot</title>
     <style>
-        :root {
-            --gold: #ffd700;
-            --purple-dark: #1a0033;
-            --neon-pink: #ff00ff;
-            --glass: rgba(255, 255, 255, 0.1);
-        }
-
+        /* Conseils pour reproduire le style de l'image :
+           1. Palette de couleurs : Utilisez des violets sombres, des fuchsias néon et des dorés.
+           2. Organisation : Utilisez les Grilles CSS (CSS Grid) pour la grille de jeu et Flexbox pour les bandeaux de statistiques.
+           3. Graphismes : Pour un résultat optimal, remplacez les émojis par des fichiers image (.png ou .webp) de haute qualité des symboles.
+           4. Polices : Recherchez des polices d'inspiration asiatique pour les jackpots et une police sans empattement claire pour les compteurs. */
         body {
-            background-color: var(--purple-dark);
+            background-color: #1a0033; /* Violet sombre */
             color: white;
-            font-family: 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Montserrat', sans-serif; /* Police claire et moderne */
             margin: 0;
-            overflow: hidden;
+            padding: 0;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
         }
-
-        /* Conteneur principal style Mobile App */
-        #game-container {
+        /* Style inspiré du mobile-first */
+        #game-interface {
             width: 100%;
-            max-width: 450px;
-            height: 100vh;
-            background: linear-gradient(180deg, #2d004d 0%, #1a0033 100%);
+            max-width: 480px; /* Taille typique mobile */
+            background: linear-gradient(180deg, #2d004d, #1a0033);
+            border: 3px solid #ff00ff; /* Bordure néon */
+            border-radius: 15px;
             display: flex;
             flex-direction: column;
-            border: 2px solid #444;
-            position: relative;
         }
-
-        /* Header avec Jackpot */
-        .header {
+        /* Style simplifié pour la barre de solde */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
             padding: 10px;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.3);
+            background-color: rgba(0, 0, 0, 0.4);
         }
-
-        .jackpot-bar {
-            background: linear-gradient(90deg, #b8860b, #ffd700, #b8860b);
-            color: #000;
+        .balance-container {
+            color: #ffd700; /* Doré */
             font-weight: bold;
-            border-radius: 5px;
-            padding: 5px;
-            margin: 5px 0;
-            box-shadow: 0 0 15px var(--gold);
-            font-size: 1.2rem;
         }
-
-        .balance-box {
-            font-size: 1.5rem;
-            color: var(--gold);
-            text-shadow: 0 0 10px rgba(255,215,0,0.5);
-        }
-
-        /* Zone de Jeu (Rouleaux) */
-        .slot-machine {
-            flex-grow: 1;
+        /* Style simplifié pour la grille de jeu */
+        .slot-grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(5, 1fr); /* 5 colonnes */
             gap: 5px;
-            padding: 10px;
-            background: rgba(0,0,0,0.4);
-            margin: 10px;
-            border-radius: 10px;
+            padding: 15px;
+            background-color: #0d001a;
             border: 2px solid #5a008a;
         }
-
-        .reel {
-            background: #0d001a;
-            border-radius: 5px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-around;
-            align-items: center;
-            border: 1px solid #333;
-            overflow: hidden;
-        }
-
-        .symbol {
-            font-size: 2rem;
+        .reel-symbol {
+            background-color: #1a0033;
             height: 60px;
             display: flex;
             align-items: center;
-            transition: transform 0.1s;
-        }
-
-        /* Footer & Contrôles */
-        .footer {
-            padding: 20px;
-            background: linear-gradient(0deg, #000, transparent);
-            text-align: center;
-        }
-
-        .controls-row {
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .bet-control {
-            background: var(--glass);
-            border: 1px solid var(--neon-pink);
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            padding: 5px 15px;
-        }
-
-        .btn-mini {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0 10px;
-        }
-
-        .spin-button {
-            background: linear-gradient(180deg, #ff0055, #aa0033);
-            border: 3px solid #ff00ff;
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            color: white;
-            font-weight: bold;
-            font-size: 1.2rem;
-            cursor: pointer;
-            box-shadow: 0 0 20px var(--neon-pink);
-            transition: transform 0.1s;
-        }
-
-        .spin-button:active {
-            transform: scale(0.9);
-        }
-
-        .spin-button:disabled {
-            filter: grayscale(1);
-            box-shadow: none;
-        }
-
-        .win-announcement {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 3rem;
-            color: var(--gold);
-            text-shadow: 0 0 20px #000;
-            display: none;
-            z-index: 10;
-            pointer-events: none;
-        }
-
-        @keyframes blur-spin {
-            0% { filter: blur(0); }
-            50% { filter: blur(8px); transform: translateY(20px); }
-            100% { filter: blur(0); }
-        }
-
-        .spinning {
-            animation: blur-spin 0.2s infinite;
+            justify-content: center;
+            font-size: 2rem;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
-
-<div id="game-container">
-    <div class="header">
-        <div class="balance-box">💰 <span id="balance">100,000.00</span></div>
-        <div class="jackpot-bar">GRAND JACKPOT: 2,409,276.00</div>
-    </div>
-
-    <div class="win-announcement" id="win-text">BIG WIN!</div>
-
-    <div class="slot-machine" id="machine">
+    <div id="game-interface">
+        <div class="header-bar">
+            <div class="balance-container">Solde: <span id="current-balance">100,000</span></div>
+            <div>LV. 44</div>
         </div>
-
-    <div class="footer">
-        <div class="controls-row">
-            <div class="bet-control">
-                <button class="btn-mini" onclick="changeBet(-0.25)">-</button>
-                <div style="text-align: center; min-width: 80px;">
-                    <div style="font-size: 0.7rem; color: #aaa;">MISE</div>
-                    <div id="current-bet" style="font-weight: bold;">0.75</div>
-                </div>
-                <button class="btn-mini" onclick="changeBet(0.25)">+</button>
-            </div>
-            
-            <button class="spin-button" id="spin-btn" onclick="playGame()">SPIN</button>
-            
-            <div style="text-align: center;">
-                <div style="font-size: 0.7rem; color: #aaa;">GAIN TOTAL</div>
-                <div id="last-win" style="font-weight: bold; color: var(--gold);">0.00</div>
+        <div class="slot-grid">
+            <div class="reel-symbol">🐲</div>
+            <div class="reel-symbol">💰</div>
+            <div class="reel-symbol">K</div>
+            <div class="reel-symbol">J</div>
             </div>
         </div>
-    </div>
-</div>
-
-<script>
-    let balance = 100000.00;
-    let currentBet = 0.75;
-    const symbols = ['🐉', '💎', '🧧', '🔱', '💰', '🔥', '7️⃣'];
-    const reelCount = 5;
-    const rowCount = 3;
-
-    // Initialisation des rouleaux
-    const machine = document.getElementById('machine');
-    for (let i = 0; i < reelCount; i++) {
-        const reel = document.createElement('div');
-        reel.className = 'reel';
-        reel.id = `reel-${i}`;
-        for (let j = 0; j < rowCount; j++) {
-            const sym = document.createElement('div');
-            sym.className = 'symbol';
-            sym.innerText = symbols[Math.floor(Math.random() * symbols.length)];
-            reel.appendChild(sym);
-        }
-        machine.appendChild(reel);
-    }
-
-    function changeBet(val) {
-        currentBet = Math.max(0.25, currentBet + val);
-        document.getElementById('current-bet').innerText = currentBet.toFixed(2);
-    }
-
-    function updateDisplay() {
-        document.getElementById('balance').innerText = balance.toLocaleString('en-US', {minimumFractionDigits: 2});
-    }
-
-    async function playGame() {
-        if (balance < currentBet) return alert("Fonds insuffisants !");
-
-        balance -= currentBet;
-        updateDisplay();
-        
-        const btn = document.getElementById('spin-btn');
-        btn.disabled = true;
-
-        // Animation des rouleaux
-        const reels = document.querySelectorAll('.reel');
-        reels.forEach((reel, index) => {
-            setTimeout(() => {
-                reel.classList.add('spinning');
-                
-                // Changer les symboles aléatoirement pendant le spin
-                let spinCount = 0;
-                const spinInterval = setInterval(() => {
-                    reel.innerHTML = '';
-                    for (let j = 0; j < rowCount; j++) {
-                        const sym = document.createElement('div');
-                        sym.className = 'symbol';
-                        sym.innerText = symbols[Math.floor(Math.random() * symbols.length)];
-                        reel.appendChild(sym);
-                    }
-                    spinCount++;
-                    if (spinCount > 15) {
-                        clearInterval(spinInterval);
-                        reel.classList.remove('spinning');
-                        if (index === reelCount - 1) checkResults();
-                    }
-                }, 70);
-            }, index * 100); // Décalage pour effet cascade
-        });
-    }
-
-    function checkResults() {
-        // Logique simplifiée de gain (1 chance sur 5 de gagner gros)
-        const winChance = Math.random();
-        let winAmount = 0;
-        const winText = document.getElementById('win-text');
-
-        if (winChance > 0.85) { // Grosse victoire
-            winAmount = currentBet * 20;
-            winText.innerText = "BIG WIN!";
-            triggerWinEffect();
-        } else if (winChance > 0.6) { // Petite victoire
-            winAmount = currentBet * 3;
-            winText.innerText = "WIN!";
-            triggerWinEffect();
-        }
-
-        if (winAmount > 0) {
-            balance += winAmount;
-            document.getElementById('last-win').innerText = winAmount.toFixed(2);
-        } else {
-            document.getElementById('last-win').innerText = "0.00";
-        }
-
-        updateDisplay();
-        document.getElementById('spin-btn').disabled = false;
-    }
-
-    function triggerWinEffect() {
-        const winText = document.getElementById('win-text');
-        winText.style.display = 'block';
-        setTimeout(() => { winText.style.display = 'none'; }, 2000);
-    }
-</script>
-
 </body>
 </html>
