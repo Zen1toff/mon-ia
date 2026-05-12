@@ -1,102 +1,105 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>ASTRO_STABLE_V5</title>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
-    
+    <title>Dragon Slot - Simulation</title>
     <style>
-        body { margin: 0; background: #000; font-family: monospace; color: #00ff41; overflow: hidden; }
-        #hud { position: fixed; top: 10px; left: 10px; z-index: 1000; background: rgba(0,20,0,0.8); padding: 10px; border: 1px solid #00ff41; font-size: 9px; line-height: 1.4; }
-        #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border: 1px solid rgba(0,255,65,0.5); border-radius: 50%; z-index: 500; pointer-events: none; }
-        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ff41; }
-        #crosshair::before { top: 50%; left: -5px; width: 10px; height: 1px; }
-        #crosshair::after { left: 50%; top: -5px; width: 1px; height: 10px; }
-        #boot-screen { position: fixed; inset: 0; z-index: 2000; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid #00ff41; }
-        .scan-line { width: 100%; height: 2px; background: rgba(0,255,65,0.3); position: absolute; animation: scan 3s infinite; }
-        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+        body { background: #1a0033; color: white; font-family: Arial, sans-serif; text-align: center; }
+        .machine { background: #4b0082; border: 5px solid #ffd700; border-radius: 15px; display: inline-block; padding: 20px; margin-top: 50px; box-shadow: 0 0 20px #ff00ff; }
+        .reels { display: flex; gap: 10px; margin-bottom: 20px; }
+        .reel { background: #fff; color: #000; width: 80px; height: 80px; line-height: 80px; font-size: 40px; border-radius: 10px; border: 2px solid #ffd700; }
+        .controls { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        button { background: linear-gradient(#ff0000, #8b0000); color: white; border: none; padding: 10px 30px; font-size: 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:disabled { background: #555; }
+        .stats { font-size: 24px; margin: 15px; color: #00ff00; }
+        .bet-selector { margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="boot-screen" onclick="start()">
-        <div class="scan-line"></div>
-        <h2 style="letter-spacing: 3px;">[ SYSTEM_READY ]</h2>
-        <p>TAP TO CALIBRATE & DEPLOY</p>
+    <h1>🐉 DRAGON GOLD SLOT 🐉</h1>
+    
+    <div class="stats">Solde: <span id="balance">100000</span> €</div>
+
+    <div class="machine">
+        <div class="reels">
+            <div id="reel1" class="reel">🐲</div>
+            <div id="reel2" class="reel">🐲</div>
+            <div id="reel3" class="reel">🐲</div>
+        </div>
+
+        <div class="controls">
+            <div class="bet-selector">
+                Mise: 
+                <select id="betAmount">
+                    <option value="0.75">0.75 €</option>
+                    <option value="5">5.00 €</option>
+                    <option value="10">10.00 €</option>
+                    <option value="100">100.00 €</option>
+                </select>
+            </div>
+            <button id="spinBtn" onclick="spin()">LANCER !</button>
+        </div>
     </div>
 
-    <div id="hud">
-        > LOG_STATUS: STABLE<br>
-        > GYRO_COMPENSATION: ACTIVE<br>
-        > SUN_POS: <span id="s-p">--</span><br>
-        > MOON_POS: <span id="m-p">--</span>
-    </div>
-
-    <div id="crosshair"></div>
-
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-        <a-entity id="world-root">
-            <a-entity id="sun" geometry="primitive: sphere; radius: 5" material="color: #ffaa00; shader: flat; emissive: #ffaa00">
-                <a-text value="SUN" align="center" position="0 -8 0" scale="12 12 12" color="#00ff41"></a-text>
-            </a-entity>
-            
-            <a-entity id="moon" geometry="primitive: sphere; radius: 4" material="src: https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/planets/moon_1024.jpg">
-                <a-text value="MOON" align="center" position="0 -7 0" scale="10 10 10" color="#fff"></a-text>
-            </a-entity>
-
-            <a-grid position="0 -1.6 0" rotation="-90 0 0" material="color: #00ff41; opacity: 0.1; wireframe: true"></a-grid>
-        </a-entity>
-
-        <a-camera id="main-cam" rotation-reader look-controls="magicWindowTrackingEnabled: true"></a-camera>
-    </a-scene>
+    <p id="message"></p>
 
     <script>
-        let lat, lon;
-        const root = document.getElementById('world-root');
+        let balance = 100000;
+        const symbols = ['🐲', '💎', '🔥', '🧧', '7️⃣'];
+        const reelElements = [document.getElementById('reel1'), document.getElementById('reel2'), document.getElementById('reel3')];
 
-        async function start() {
-            document.getElementById('boot-screen').style.display = 'none';
-            
-            // Autorisation Orientation (Crucial pour le lissage)
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                const permission = await DeviceOrientationEvent.requestPermission();
-                if (permission !== 'granted') return alert("Capteurs bloqués.");
+        function spin() {
+            const bet = parseFloat(document.getElementById('betAmount').value);
+            const message = document.getElementById('message');
+
+            if (balance < bet) {
+                message.innerText = "Solde insuffisant !";
+                return;
             }
 
-            navigator.geolocation.getCurrentPosition(pos => {
-                lat = pos.coords.latitude;
-                lon = pos.coords.longitude;
-                updatePositions();
-                setInterval(updatePositions, 5000); // MaJ astro toutes les 5s
-            });
+            // Déduction de la mise
+            balance -= bet;
+            updateUI();
+            
+            document.getElementById('spinBtn').disabled = true;
+            message.innerText = "Le dragon tourne...";
+
+            // Animation simple
+            let count = 0;
+            const interval = setInterval(() => {
+                reelElements.forEach(reel => {
+                    reel.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+                });
+                count++;
+                if (count > 10) {
+                    clearInterval(interval);
+                    determineResult(bet);
+                }
+            }, 100);
         }
 
-        function updatePositions() {
-            if(!lat) return;
-            const now = new Date();
-            const sun = SunCalc.getPosition(now, lat, lon);
-            const moon = SunCalc.getMoonPosition(now, lat, lon);
+        function determineResult(bet) {
+            const results = reelElements.map(reel => reel.innerText);
+            const message = document.getElementById('message');
+            document.getElementById('spinBtn').disabled = false;
 
-            setPos('sun', sun.azimuth, sun.altitude, 120);
-            setPos('moon', moon.azimuth, moon.altitude, 100);
-
-            document.getElementById('s-p').innerText = `${Math.round(sun.altitude*57.3)}°`;
-            document.getElementById('m-p').innerText = `${Math.round(moon.altitude*57.3)}°`;
+            if (results[0] === results[1] && results[1] === results[2]) {
+                let win = bet * 10; // Gain de 10x la mise
+                balance += win;
+                message.innerHTML = `<span style="color:gold; font-size:24px;">JACKPOT ! +${win} €</span>`;
+            } else if (results[0] === results[1] || results[1] === results[2]) {
+                let win = bet * 2; // Petit gain
+                balance += win;
+                message.innerText = `Petit gain: +${win} €`;
+            } else {
+                message.innerText = "Réessayez !";
+            }
+            updateUI();
         }
 
-        function setPos(id, az, alt, dist) {
-            const el = document.getElementById(id);
-            // Inversion de l'azimuth pour correspondre au repère A-Frame (Sud = 0)
-            const adjustedAz = az + Math.PI; 
-            
-            const x = dist * Math.cos(alt) * Math.sin(adjustedAz);
-            const y = dist * Math.sin(alt);
-            const z = dist * Math.cos(alt) * Math.cos(adjustedAz);
-            
-            el.setAttribute('position', `${x} ${y} ${z}`);
+        function updateUI() {
+            document.getElementById('balance').innerText = balance.toFixed(2);
         }
     </script>
 </body>
