@@ -2,165 +2,224 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>F1 Race Control - Live Timing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragon Casino - Real Experience</title>
     <style>
-        :root { --f1-red: #e10600; --f1-dark: #15151e; --f1-carbon: #1f1f27; }
-        body { background: var(--f1-dark); color: white; font-family: 'Titillium Web', sans-serif; margin: 0; padding: 20px; }
-        
-        /* Dashboard Layout */
-        .race-container { display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
-        
-        /* Leaderboard Style */
-        .leaderboard { background: var(--f1-carbon); border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .header { background: var(--f1-red); padding: 10px; font-weight: bold; text-transform: uppercase; font-size: 0.9em; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 10px; background: #2b2b35; font-size: 0.8em; color: #aaa; }
-        td { padding: 12px 10px; border-bottom: 1px solid #2b2b35; font-weight: 600; }
-        .pos { width: 30px; text-align: center; color: var(--f1-red); }
-        .gap { color: #f8f8f8; font-family: monospace; }
-        .fastest-lap { color: #b15fc0; } /* Violet */
+        :root {
+            --purple-main: #3b0273;
+            --purple-dark: #1a013d;
+            --gold: #ffd700;
+            --neon-pink: #ff00ff;
+        }
 
-        /* Telemetry */
-        .main-view { background: #000; border-radius: 10px; padding: 20px; border: 1px solid #333; }
-        .track-strip { height: 4px; background: #333; position: relative; margin: 40px 0; }
-        .car-dot { width: 12px; height: 12px; border-radius: 50%; position: absolute; top: -4px; transform: translateX(-50%); transition: left 0.5s linear; }
+        body {
+            margin: 0; background: #000; color: white;
+            font-family: 'Arial Black', sans-serif;
+            display: flex; justify-content: center; align-items: center; height: 100vh;
+        }
+
+        /* Conteneur principal style Mobile */
+        #app {
+            width: 400px; height: 750px;
+            background: linear-gradient(to bottom, #4b0082, #000);
+            border: 4px solid #333; border-radius: 20px;
+            position: relative; overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+
+        /* Header : Solde et Niveau */
+        .top-bar {
+            display: flex; justify-content: space-between; padding: 10px;
+            background: rgba(0,0,0,0.5); font-size: 14px;
+        }
+        .balance { color: var(--gold); }
+
+        /* Jackpots */
+        .jackpots {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 5px;
+        }
+        .jackpot-item {
+            background: rgba(0,0,0,0.6); border: 1px solid var(--gold);
+            font-size: 10px; text-align: center; border-radius: 5px; padding: 2px;
+        }
+        .grand { grid-column: span 2; background: linear-gradient(to right, #b8860b, #ffd700, #b8860b); color: black; font-size: 14px; }
+
+        /* Zone Dragon (Décor) */
+        .dragon-area {
+            height: 150px; position: relative;
+            display: flex; justify-content: center; align-items: flex-end;
+        }
+        .dragon-emoji { font-size: 100px; filter: drop-shadow(0 0 10px var(--gold)); }
+
+        /* Menu Latéral (Quêtes) */
+        .side-menu {
+            position: absolute; left: 0; top: 150px; width: 60px;
+            background: rgba(123, 0, 255, 0.7); border-radius: 0 15px 15px 0;
+            padding: 10px 0; display: flex; flex-direction: column; gap: 10px; align-items: center;
+        }
+        .quest-icon { width: 35px; height: 35px; background: #fff; border-radius: 5px; font-size: 20px; text-align: center; }
+
+        /* Grille de Machine à Sous */
+        .slot-container {
+            flex-grow: 1; padding: 10px; display: flex; justify-content: center; align-items: center;
+        }
+        .grid {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+            background: rgba(255, 255, 255, 0.1); padding: 5px; border-radius: 5px; width: 100%;
+        }
+        .reel {
+            background: #0d001a; border: 1px solid #444; height: 180px;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .symbol {
+            min-height: 60px; display: flex; justify-content: center; align-items: center;
+            font-size: 30px; border-bottom: 1px solid #222;
+        }
+
+        /* Footer : Contrôles */
+        .controls {
+            background: #220044; padding: 15px; border-top: 3px solid var(--neon-pink);
+            text-align: center;
+        }
+        .win-display { color: var(--gold); font-size: 18px; margin-bottom: 10px; height: 20px; }
         
-        .controls { margin-top: 20px; display: flex; gap: 10px; }
-        button { background: white; color: black; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; }
-        button:hover { background: var(--f1-red); color: white; }
+        .bet-bar {
+            display: flex; justify-content: space-around; align-items: center; margin-bottom: 10px;
+        }
+        .btn-bet { background: #555; border: none; color: white; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; }
+        
+        .spin-btn {
+            background: linear-gradient(#ff0000, #800000);
+            border: 2px solid white; color: white; width: 80%; padding: 12px;
+            border-radius: 25px; font-size: 20px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 0 #500;
+        }
+        .spin-btn:active { transform: translateY(3px); box-shadow: none; }
+
+        /* Animations */
+        @keyframes blur {
+            0% { filter: blur(0); }
+            50% { filter: blur(4px); transform: translateY(-20px); }
+            100% { filter: blur(0); }
+        }
+        .spinning { animation: blur 0.1s infinite; }
     </style>
 </head>
 <body>
 
-<div class="race-container">
-    <!-- Tableau de bord gauche : Classement -->
-    <div class="leaderboard">
-        <div class="header">Live Timing - Grand Prix</div>
-        <table>
-            <thead>
-                <tr>
-                    <th class="pos">POS</th>
-                    <th>PILOTE</th>
-                    <th>ÉCART</th>
-                    <th>LAST LAP</th>
-                </tr>
-            </thead>
-            <tbody id="timing-body">
-                <!-- Généré par JS -->
-            </tbody>
-        </table>
+<div id="app">
+    <div class="top-bar">
+        <div class="balance">💰 <span id="balance">100,000.00</span></div>
+        <div>LV. 44 ⭐</div>
     </div>
 
-    <!-- Vue droite : Télémétrie et Circuit -->
-    <div class="main-view">
-        <h2 id="session-status">SESSION : COURSE (LAP 1/10)</h2>
-        <div class="track-strip" id="track">
-            <!-- Les points des voitures s'affichent ici -->
-        </div>
-        
-        <div style="display: flex; justify-content: space-between; margin-top: 50px;">
-            <div>
-                <small>VOTRE DELTA (VSTR)</small>
-                <div id="delta-display" style="font-size: 2.5em; font-weight: bold;">--.---</div>
-            </div>
-            <div style="text-align: right;">
-                <small>ÉTAT DES PNEUS</small>
-                <div style="color: #00ff00; font-size: 1.5em;">TENDRE (S) - 98%</div>
-            </div>
-        </div>
+    <div class="jackpots">
+        <div class="jackpot-item grand">GRAND: 2,409,276,000</div>
+        <div class="jackpot-item">MAXI: 12,472,000</div>
+        <div class="jackpot-item">MAJOR: 741,312,000</div>
+    </div>
 
-        <div class="controls">
-            <button onclick="startRace()">START ENGINE</button>
-            <button onclick="toggleERS()" id="ers-btn">ERS : OFF</button>
+    <div class="side-menu">
+        <div class="quest-icon">🤠</div>
+        <div class="quest-icon">🎁</div>
+        <div class="quest-icon">⚡</div>
+    </div>
+
+    <div class="dragon-area">
+        <div class="dragon-emoji">🐲</div>
+    </div>
+
+    <div class="slot-container">
+        <div class="grid" id="main-grid">
+            <div class="reel" id="r0"></div>
+            <div class="reel" id="r1"></div>
+            <div class="reel" id="r2"></div>
+            <div class="reel" id="r3"></div>
+            <div class="reel" id="r4"></div>
         </div>
+    </div>
+
+    <div class="controls">
+        <div class="win-display" id="win-text">BONNE CHANCE !</div>
+        <div class="bet-bar">
+            <button class="btn-bet" onclick="updateBet(-0.25)">-</button>
+            <div>MISE: <span id="bet-val">0.75</span></div>
+            <button class="btn-bet" onclick="updateBet(0.25)">+</button>
+        </div>
+        <button class="spin-btn" id="spin-btn" onclick="spin()">ARRÊT</button>
     </div>
 </div>
 
 <script>
-    // Liste des pilotes (IA)
-    let drivers = [
-        { id: 1, name: "VERSTAPPEN", team: "Red Bull", color: "#3671C6", pos: 0, lapTime: 0, lastLap: "--", gap: 0, speed: 0.85 },
-        { id: 2, name: "NORRIS", team: "McLaren", color: "#FF8700", pos: -2, lapTime: 0, lastLap: "--", gap: 0, speed: 0.84 },
-        { id: 3, name: "HAMILTON", team: "Mercedes", color: "#27F4D2", pos: -4, lapTime: 0, lastLap: "--", gap: 0, speed: 0.835 },
-        { id: 4, name: "LECLERC", team: "Ferrari", color: "#E80020", pos: -6, lapTime: 0, lastLap: "--", gap: 0, speed: 0.83 },
-        { id: 0, name: "YOU (VSTR)", team: "Aston Martin", color: "#229971", pos: -8, lapTime: 0, lastLap: "--", gap: 0, speed: 0.82 }
-    ];
+    let balance = 100000.00;
+    let currentBet = 0.75;
+    const symbols = ['🐉', '💎', '🧧', '🔱', '💰', '🔥', 'K', 'J', 'Q'];
+    const reels = [document.getElementById('r0'), document.getElementById('r1'), document.getElementById('r2'), document.getElementById('r3'), document.getElementById('r4')];
 
-    let raceInterval;
-    let lap = 1;
-    let ersActive = false;
-
-    function toggleERS() {
-        ersActive = !ersActive;
-        drivers.find(d => d.id === 0).speed = ersActive ? 0.92 : 0.82;
-        document.getElementById('ers-btn').innerText = ersActive ? "ERS : ON" : "ERS : OFF";
-        document.getElementById('ers-btn').style.background = ersActive ? "#b15fc0" : "white";
-    }
-
-    function startRace() {
-        if(raceInterval) return;
-        
-        // Créer les points sur la piste
-        const track = document.getElementById('track');
-        drivers.forEach(d => {
-            let dot = document.createElement('div');
-            dot.className = 'car-dot';
-            dot.id = `car-${d.id}`;
-            dot.style.background = d.color;
-            track.appendChild(dot);
-        });
-
-        raceInterval = setInterval(updatePhysics, 100);
-    }
-
-    function updatePhysics() {
-        // 1. Mise à jour des positions
-        drivers.forEach(d => {
-            d.pos += d.speed + (Math.random() * 0.05); // Ajout d'aléatoire IA
-            d.lapTime += 0.1;
-            
-            // Si un tour est fini
-            if (d.pos >= 100) {
-                d.pos = 0;
-                d.lastLap = (70 + (1 - d.speed) * 20 + Math.random()).toFixed(3);
-                if(d.id === 0) lap++;
-            }
-
-            document.getElementById(`car-${d.id}`).style.left = d.pos + "%";
-        });
-
-        // 2. Calcul du classement et des écarts
-        // On trie par position parcourue (le plus grand nombre est devant)
-        let sorted = [...drivers].sort((a, b) => b.pos - a.pos);
-        
-        const tbody = document.getElementById('timing-body');
-        tbody.innerHTML = "";
-
-        sorted.forEach((d, index) => {
-            // Calcul de l'écart (Gap) simplifié basé sur la distance
-            let gapText = index === 0 ? "LEADER" : `+${((sorted[0].pos - d.pos) * 0.15).toFixed(3)}s`;
-            
-            let row = `
-                <tr>
-                    <td class="pos">${index + 1}</td>
-                    <td style="border-left: 4px solid ${d.color}">${d.name}</td>
-                    <td class="gap">${gapText}</td>
-                    <td class="${index === 0 ? 'fastest-lap' : ''}">${d.lastLap}</td>
-                </tr>
-            `;
-            tbody.innerHTML += row;
-
-            // Update Delta personnel
-            if(d.id === 0) {
-                let delta = (sorted[0].pos - d.pos) * -0.15;
-                let el = document.getElementById('delta-display');
-                el.innerText = (delta > -0.1 ? "" : "+") + delta.toFixed(3);
-                el.style.color = delta > -1 ? "#00ff00" : "#ff4d4d";
+    // Remplissage initial
+    function init() {
+        reels.forEach(r => {
+            for(let i=0; i<3; i++) {
+                let div = document.createElement('div');
+                div.className = 'symbol';
+                div.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+                r.appendChild(div);
             }
         });
-
-        document.getElementById('session-status').innerText = `SESSION : COURSE (LAP ${lap}/10)`;
     }
+
+    function updateBet(amount) {
+        currentBet = Math.max(0.75, currentBet + amount);
+        document.getElementById('bet-val').innerText = currentBet.toFixed(2);
+    }
+
+    function spin() {
+        if (balance < currentBet) return alert("Solde insuffisant !");
+        
+        balance -= currentBet;
+        document.getElementById('balance').innerText = balance.toLocaleString();
+        document.getElementById('win-text').innerText = "Tourne...";
+        document.getElementById('spin-btn').disabled = true;
+
+        reels.forEach((r, i) => {
+            setTimeout(() => {
+                r.classList.add('spinning');
+                let count = 0;
+                let timer = setInterval(() => {
+                    r.innerHTML = '';
+                    for(let j=0; j<3; j++) {
+                        let div = document.createElement('div');
+                        div.className = 'symbol';
+                        div.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+                        r.appendChild(div);
+                    }
+                    count++;
+                    if(count > 15) {
+                        clearInterval(timer);
+                        r.classList.remove('spinning');
+                        if(i === 4) endSpin();
+                    }
+                }, 50);
+            }, i * 100);
+        });
+    }
+
+    function endSpin() {
+        document.getElementById('spin-btn').disabled = false;
+        // Calcul de gain aléatoire (Simulé)
+        let winChance = Math.random();
+        if(winChance > 0.7) {
+            let win = currentBet * (Math.floor(Math.random() * 5) + 2);
+            balance += win;
+            document.getElementById('win-text').innerText = "GAIN: " + win.toFixed(2) + " !";
+            document.getElementById('balance').innerText = balance.toLocaleString();
+        } else {
+            document.getElementById('win-text').innerText = "ESSAYE ENCORE !";
+        }
+    }
+
+    init();
 </script>
+
 </body>
 </html>
