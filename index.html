@@ -2,76 +2,165 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interface Dragon Slot</title>
+    <title>F1 Race Control - Live Timing</title>
     <style>
-        /* Conseils pour reproduire le style de l'image :
-           1. Palette de couleurs : Utilisez des violets sombres, des fuchsias néon et des dorés.
-           2. Organisation : Utilisez les Grilles CSS (CSS Grid) pour la grille de jeu et Flexbox pour les bandeaux de statistiques.
-           3. Graphismes : Pour un résultat optimal, remplacez les émojis par des fichiers image (.png ou .webp) de haute qualité des symboles.
-           4. Polices : Recherchez des polices d'inspiration asiatique pour les jackpots et une police sans empattement claire pour les compteurs. */
-        body {
-            background-color: #1a0033; /* Violet sombre */
-            color: white;
-            font-family: 'Montserrat', sans-serif; /* Police claire et moderne */
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-        }
-        /* Style inspiré du mobile-first */
-        #game-interface {
-            width: 100%;
-            max-width: 480px; /* Taille typique mobile */
-            background: linear-gradient(180deg, #2d004d, #1a0033);
-            border: 3px solid #ff00ff; /* Bordure néon */
-            border-radius: 15px;
-            display: flex;
-            flex-direction: column;
-        }
-        /* Style simplifié pour la barre de solde */
-        .header-bar {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
-            background-color: rgba(0, 0, 0, 0.4);
-        }
-        .balance-container {
-            color: #ffd700; /* Doré */
-            font-weight: bold;
-        }
-        /* Style simplifié pour la grille de jeu */
-        .slot-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr); /* 5 colonnes */
-            gap: 5px;
-            padding: 15px;
-            background-color: #0d001a;
-            border: 2px solid #5a008a;
-        }
-        .reel-symbol {
-            background-color: #1a0033;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            border-radius: 5px;
-        }
+        :root { --f1-red: #e10600; --f1-dark: #15151e; --f1-carbon: #1f1f27; }
+        body { background: var(--f1-dark); color: white; font-family: 'Titillium Web', sans-serif; margin: 0; padding: 20px; }
+        
+        /* Dashboard Layout */
+        .race-container { display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
+        
+        /* Leaderboard Style */
+        .leaderboard { background: var(--f1-carbon); border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .header { background: var(--f1-red); padding: 10px; font-weight: bold; text-transform: uppercase; font-size: 0.9em; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 10px; background: #2b2b35; font-size: 0.8em; color: #aaa; }
+        td { padding: 12px 10px; border-bottom: 1px solid #2b2b35; font-weight: 600; }
+        .pos { width: 30px; text-align: center; color: var(--f1-red); }
+        .gap { color: #f8f8f8; font-family: monospace; }
+        .fastest-lap { color: #b15fc0; } /* Violet */
+
+        /* Telemetry */
+        .main-view { background: #000; border-radius: 10px; padding: 20px; border: 1px solid #333; }
+        .track-strip { height: 4px; background: #333; position: relative; margin: 40px 0; }
+        .car-dot { width: 12px; height: 12px; border-radius: 50%; position: absolute; top: -4px; transform: translateX(-50%); transition: left 0.5s linear; }
+        
+        .controls { margin-top: 20px; display: flex; gap: 10px; }
+        button { background: white; color: black; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        button:hover { background: var(--f1-red); color: white; }
     </style>
 </head>
 <body>
-    <div id="game-interface">
-        <div class="header-bar">
-            <div class="balance-container">Solde: <span id="current-balance">100,000</span></div>
-            <div>LV. 44</div>
+
+<div class="race-container">
+    <!-- Tableau de bord gauche : Classement -->
+    <div class="leaderboard">
+        <div class="header">Live Timing - Grand Prix</div>
+        <table>
+            <thead>
+                <tr>
+                    <th class="pos">POS</th>
+                    <th>PILOTE</th>
+                    <th>ÉCART</th>
+                    <th>LAST LAP</th>
+                </tr>
+            </thead>
+            <tbody id="timing-body">
+                <!-- Généré par JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Vue droite : Télémétrie et Circuit -->
+    <div class="main-view">
+        <h2 id="session-status">SESSION : COURSE (LAP 1/10)</h2>
+        <div class="track-strip" id="track">
+            <!-- Les points des voitures s'affichent ici -->
         </div>
-        <div class="slot-grid">
-            <div class="reel-symbol">🐲</div>
-            <div class="reel-symbol">💰</div>
-            <div class="reel-symbol">K</div>
-            <div class="reel-symbol">J</div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 50px;">
+            <div>
+                <small>VOTRE DELTA (VSTR)</small>
+                <div id="delta-display" style="font-size: 2.5em; font-weight: bold;">--.---</div>
+            </div>
+            <div style="text-align: right;">
+                <small>ÉTAT DES PNEUS</small>
+                <div style="color: #00ff00; font-size: 1.5em;">TENDRE (S) - 98%</div>
             </div>
         </div>
+
+        <div class="controls">
+            <button onclick="startRace()">START ENGINE</button>
+            <button onclick="toggleERS()" id="ers-btn">ERS : OFF</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Liste des pilotes (IA)
+    let drivers = [
+        { id: 1, name: "VERSTAPPEN", team: "Red Bull", color: "#3671C6", pos: 0, lapTime: 0, lastLap: "--", gap: 0, speed: 0.85 },
+        { id: 2, name: "NORRIS", team: "McLaren", color: "#FF8700", pos: -2, lapTime: 0, lastLap: "--", gap: 0, speed: 0.84 },
+        { id: 3, name: "HAMILTON", team: "Mercedes", color: "#27F4D2", pos: -4, lapTime: 0, lastLap: "--", gap: 0, speed: 0.835 },
+        { id: 4, name: "LECLERC", team: "Ferrari", color: "#E80020", pos: -6, lapTime: 0, lastLap: "--", gap: 0, speed: 0.83 },
+        { id: 0, name: "YOU (VSTR)", team: "Aston Martin", color: "#229971", pos: -8, lapTime: 0, lastLap: "--", gap: 0, speed: 0.82 }
+    ];
+
+    let raceInterval;
+    let lap = 1;
+    let ersActive = false;
+
+    function toggleERS() {
+        ersActive = !ersActive;
+        drivers.find(d => d.id === 0).speed = ersActive ? 0.92 : 0.82;
+        document.getElementById('ers-btn').innerText = ersActive ? "ERS : ON" : "ERS : OFF";
+        document.getElementById('ers-btn').style.background = ersActive ? "#b15fc0" : "white";
+    }
+
+    function startRace() {
+        if(raceInterval) return;
+        
+        // Créer les points sur la piste
+        const track = document.getElementById('track');
+        drivers.forEach(d => {
+            let dot = document.createElement('div');
+            dot.className = 'car-dot';
+            dot.id = `car-${d.id}`;
+            dot.style.background = d.color;
+            track.appendChild(dot);
+        });
+
+        raceInterval = setInterval(updatePhysics, 100);
+    }
+
+    function updatePhysics() {
+        // 1. Mise à jour des positions
+        drivers.forEach(d => {
+            d.pos += d.speed + (Math.random() * 0.05); // Ajout d'aléatoire IA
+            d.lapTime += 0.1;
+            
+            // Si un tour est fini
+            if (d.pos >= 100) {
+                d.pos = 0;
+                d.lastLap = (70 + (1 - d.speed) * 20 + Math.random()).toFixed(3);
+                if(d.id === 0) lap++;
+            }
+
+            document.getElementById(`car-${d.id}`).style.left = d.pos + "%";
+        });
+
+        // 2. Calcul du classement et des écarts
+        // On trie par position parcourue (le plus grand nombre est devant)
+        let sorted = [...drivers].sort((a, b) => b.pos - a.pos);
+        
+        const tbody = document.getElementById('timing-body');
+        tbody.innerHTML = "";
+
+        sorted.forEach((d, index) => {
+            // Calcul de l'écart (Gap) simplifié basé sur la distance
+            let gapText = index === 0 ? "LEADER" : `+${((sorted[0].pos - d.pos) * 0.15).toFixed(3)}s`;
+            
+            let row = `
+                <tr>
+                    <td class="pos">${index + 1}</td>
+                    <td style="border-left: 4px solid ${d.color}">${d.name}</td>
+                    <td class="gap">${gapText}</td>
+                    <td class="${index === 0 ? 'fastest-lap' : ''}">${d.lastLap}</td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+
+            // Update Delta personnel
+            if(d.id === 0) {
+                let delta = (sorted[0].pos - d.pos) * -0.15;
+                let el = document.getElementById('delta-display');
+                el.innerText = (delta > -0.1 ? "" : "+") + delta.toFixed(3);
+                el.style.color = delta > -1 ? "#00ff00" : "#ff4d4d";
+            }
+        });
+
+        document.getElementById('session-status').innerText = `SESSION : COURSE (LAP ${lap}/10)`;
+    }
+</script>
 </body>
 </html>
