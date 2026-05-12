@@ -2,174 +2,129 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sideswipe HTML Edition</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sideswipe 3D Pro</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; font-family: sans-serif; }
-        canvas { display: block; }
-        #ui {
-            position: absolute; top: 20px; width: 100%;
-            display: flex; justify-content: space-around;
-            color: white; font-size: 2rem; font-weight: bold; pointer-events: none;
-        }
-        #controls {
-            position: absolute; bottom: 30px; width: 100%;
-            display: flex; justify-content: center; gap: 50px;
-        }
-        .btn {
-            width: 80px; height: 80px; border-radius: 50%;
-            background: rgba(255,255,255,0.2); backdrop-filter: blur(10px);
-            border: 2px solid white; color: white; font-weight: bold;
-            display: flex; align-items: center; justify-content: center;
-            user-select: none; cursor: pointer;
-        }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+        #gui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; font-size: 24px; pointer-events: none; text-shadow: 2px 2px 4px #000; }
+        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; }
+        .btn { width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid #fff; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(5px); user-select: none; }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    <div id="scoreBlue">0</div>
-    <div style="color: #ff3b30;">SIDESWIPE</div>
-    <div id="scoreRed">0</div>
+<div id="gui">SCORE: <span id="s1">0</span> - <span id="s2">0</span></div>
+<div id="controls">
+    <div class="btn" id="btn-left">←</div>
+    <div class="btn" id="btn-jump">JUMP</div>
+    <div class="btn" id="btn-boost" style="background: orange;">BOOST</div>
+    <div class="btn" id="btn-right">→</div>
 </div>
 
-<div id="controls">
-    <div class="btn" id="jumpBtn">SAUT</div>
-    <div class="btn" id="boostBtn" style="background: rgba(255, 60, 0, 0.5);">BOOST</div>
-</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 
 <script>
-// --- CONFIGURATION MATTER.JS ---
-const { Engine, Render, Runner, Bodies, Composite, Body, Vector, Events } = Matter;
+/** --- INITIALISATION PHYSIQUE (CANNON.JS) --- **/
+const world = new CANNON.World();
+world.gravity.set(0, -15, 0); // Gravité Sideswipe
 
-const engine = Engine.create();
-const world = engine.world;
-engine.gravity.y = 1.2; // Pesanteur forte comme Sideswipe
+/** --- INITIALISATION RENDU (THREE.JS) --- **/
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x111122);
+document.body.appendChild(renderer.domElement);
 
-const width = window.innerWidth;
-const height = window.innerHeight;
+// Lumières
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+const sun = new THREE.DirectionalLight(0xffffff, 1);
+sun.position.set(10, 20, 10);
+scene.add(sun);
 
-const render = Render.create({
-    element: document.body,
-    engine: engine,
-    options: {
-        width: width,
-        height: height,
-        wireframes: false,
-        background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)'
+/** --- LE TERRAIN (STADE) --- **/
+const arenaSize = { w: 60, h: 30, d: 2 };
+const groundMat = new THREE.MeshPhongMaterial({ color: 0x228822, emissive: 0x001100 });
+const groundGeo = new THREE.BoxGeometry(arenaSize.w, 1, arenaSize.d);
+const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+scene.add(groundMesh);
+
+const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(30, 0.5, 1)) });
+world.addBody(groundBody);
+
+/** --- LA BALLE 3D --- **/
+const ballRadius = 1.5;
+const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
+const ballMat = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 100 });
+const ballMesh = new THREE.Mesh(ballGeo, ballMat);
+scene.add(ballMesh);
+
+const ballBody = new CANNON.Body({
+    mass: 1,
+    shape: new CANNON.Sphere(ballRadius),
+    material: new CANNON.Material({ restitution: 0.9 }) // Rebond Sideswipe
+});
+ballBody.position.set(0, 10, 0);
+world.addBody(ballBody);
+
+/** --- LA VOITURE --- **/
+const carGeo = new THREE.BoxGeometry(3, 1.2, 1.8);
+const carMat = new THREE.MeshPhongMaterial({ color: 0x0077ff });
+const carMesh = new THREE.Mesh(carGeo, carMat);
+scene.add(carMesh);
+
+const carBody = new CANNON.Body({
+    mass: 2,
+    shape: new CANNON.Box(new CANNON.Vec3(1.5, 0.6, 0.9))
+});
+carBody.position.set(-15, 2, 0);
+world.addBody(carBody);
+
+/** --- CONTRÔLES --- **/
+const input = { left: false, right: false, boost: false };
+document.getElementById('btn-left').ontouchstart = () => input.left = true;
+document.getElementById('btn-left').ontouchend = () => input.left = false;
+document.getElementById('btn-right').ontouchstart = () => input.right = true;
+document.getElementById('btn-right').ontouchend = () => input.right = false;
+document.getElementById('btn-boost').ontouchstart = () => input.boost = true;
+document.getElementById('btn-boost').ontouchend = () => input.boost = false;
+document.getElementById('btn-jump').onclick = () => {
+    carBody.applyImpulse(new CANNON.Vec3(0, 15, 0), carBody.position);
+};
+
+/** --- BOUCLE DE JEU --- **/
+camera.position.z = 25;
+camera.position.y = 8;
+
+function animate() {
+    requestAnimationFrame(animate);
+    world.step(1/60);
+
+    // Mouvement voiture
+    if(input.left) carBody.velocity.x = -15;
+    else if(input.right) carBody.velocity.x = 15;
+    else carBody.velocity.x *= 0.95;
+
+    if(input.boost) {
+        carBody.applyForce(new CANNON.Vec3(input.right ? 40 : -40, 20, 0), carBody.position);
     }
-});
 
-Render.run(render);
-const runner = Runner.create();
-Runner.run(runner, engine);
+    // Stabilisation (empêcher la voiture de sortir du plan Z)
+    carBody.position.z = 0;
+    ballBody.position.z = 0;
 
-// --- CRÉATION DE L'ARÈNE ---
-const ground = Bodies.rectangle(width/2, height, width, 60, { isStatic: true, render: { fillStyle: '#333' } });
-const ceiling = Bodies.rectangle(width/2, 0, width, 60, { isStatic: true, render: { fillStyle: '#333' } });
-const leftWall = Bodies.rectangle(0, height/2, 60, height, { isStatic: true });
-const rightWall = Bodies.rectangle(width, height/2, 60, height, { isStatic: true });
+    // Sync Three.js avec Cannon.js
+    carMesh.position.copy(carBody.position);
+    carMesh.quaternion.copy(carBody.quaternion);
+    ballMesh.position.copy(ballBody.position);
+    ballMesh.quaternion.copy(ballBody.quaternion);
 
-// Buts (Zones sensorielles)
-const goalWidth = 100;
-const goalHeight = 250;
-const leftGoal = Bodies.rectangle(30, height - goalHeight/2 - 30, 20, goalHeight, { isStatic: true, isSensor: true, render: { fillStyle: '#007aff' } });
-const rightGoal = Bodies.rectangle(width - 30, height - goalHeight/2 - 30, 20, goalHeight, { isStatic: true, isSensor: true, render: { fillStyle: '#ff3b30' } });
-
-Composite.add(world, [ground, ceiling, leftWall, rightWall, leftGoal, rightGoal]);
-
-// --- LA BALLE (Physique rebondissante) ---
-const ball = Bodies.circle(width/2, height/2, 35, {
-    restitution: 0.9, // Rebond élevé
-    friction: 0.005,
-    density: 0.001,
-    render: { fillStyle: '#fff', strokeStyle: '#000', lineWidth: 2 }
-});
-Composite.add(world, ball);
-
-// --- LA VOITURE ---
-const car = Bodies.rectangle(width/4, height - 100, 80, 40, {
-    restitution: 0.3,
-    friction: 0.1,
-    density: 0.02,
-    chamfer: { radius: 10 },
-    render: { fillStyle: '#007aff' }
-});
-Composite.add(world, car);
-
-// --- LOGIQUE DE JEU ---
-let scoreB = 0;
-let scoreR = 0;
-const keys = {};
-
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
-
-// Contrôles tactiles / Boutons
-document.getElementById('jumpBtn').addEventListener('touchstart', jump);
-document.getElementById('boostBtn').addEventListener('touchstart', () => keys['Boost'] = true);
-document.getElementById('boostBtn').addEventListener('touchend', () => keys['Boost'] = false);
-
-function jump() {
-    Body.applyForce(car, car.position, { x: 0, y: -0.8 });
+    renderer.render(scene, camera);
 }
 
-function resetBall() {
-    Body.setPosition(ball, { x: width/2, y: height/2 });
-    Body.setVelocity(ball, { x: 0, y: 0 });
-}
-
-// --- BOUCLE DE MISE À JOUR ---
-Events.on(engine, 'beforeUpdate', () => {
-    // Déplacement latéral (Touches Flèches ou A/D)
-    if (keys['ArrowLeft'] || keys['KeyA']) {
-        Body.translate(car, { x: -7, y: 0 });
-    }
-    if (keys['ArrowRight'] || keys['KeyD']) {
-        Body.translate(car, { x: 7, y: 0 });
-    }
-    
-    // Saut (Espace)
-    if (keys['Space']) {
-        jump();
-        keys['Space'] = false; // Empêcher le vol infini
-    }
-
-    // Boost (Shift ou Bouton Boost)
-    if (keys['ShiftLeft'] || keys['Boost']) {
-        const force = 0.02;
-        const angle = car.angle;
-        Body.applyForce(car, car.position, { 
-            x: Math.cos(angle) * force * 5, 
-            y: Math.sin(angle) * force 
-        });
-    }
-
-    // Stabilisation de la voiture (pour qu'elle ne reste pas sur le toit)
-    if (Math.abs(car.angle) > 0.1) {
-        Body.setAngle(car, car.angle * 0.95);
-    }
-
-    // Vérification des buts
-    if (Matter.Collision.collides(ball, leftGoal)) {
-        scoreR++;
-        document.getElementById('scoreRed').innerText = scoreR;
-        resetBall();
-    }
-    if (Matter.Collision.collides(ball, rightGoal)) {
-        scoreB++;
-        document.getElementById('scoreBlue').innerText = scoreB;
-        resetBall();
-    }
-});
-
-// Ajustement fenêtre
-window.addEventListener('resize', () => {
-    render.canvas.width = window.innerWidth;
-    render.canvas.height = window.innerHeight;
-});
+animate();
 </script>
-
 </body>
 </html>
