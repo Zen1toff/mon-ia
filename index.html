@@ -2,105 +2,309 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Dragon Slot - Simulation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragon Gold Casino</title>
     <style>
-        body { background: #1a0033; color: white; font-family: Arial, sans-serif; text-align: center; }
-        .machine { background: #4b0082; border: 5px solid #ffd700; border-radius: 15px; display: inline-block; padding: 20px; margin-top: 50px; box-shadow: 0 0 20px #ff00ff; }
-        .reels { display: flex; gap: 10px; margin-bottom: 20px; }
-        .reel { background: #fff; color: #000; width: 80px; height: 80px; line-height: 80px; font-size: 40px; border-radius: 10px; border: 2px solid #ffd700; }
-        .controls { display: flex; flex-direction: column; gap: 10px; align-items: center; }
-        button { background: linear-gradient(#ff0000, #8b0000); color: white; border: none; padding: 10px 30px; font-size: 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:disabled { background: #555; }
-        .stats { font-size: 24px; margin: 15px; color: #00ff00; }
-        .bet-selector { margin-bottom: 10px; }
+        :root {
+            --gold: #ffd700;
+            --purple-dark: #1a0033;
+            --neon-pink: #ff00ff;
+            --glass: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            background-color: var(--purple-dark);
+            color: white;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* Conteneur principal style Mobile App */
+        #game-container {
+            width: 100%;
+            max-width: 450px;
+            height: 100vh;
+            background: linear-gradient(180deg, #2d004d 0%, #1a0033 100%);
+            display: flex;
+            flex-direction: column;
+            border: 2px solid #444;
+            position: relative;
+        }
+
+        /* Header avec Jackpot */
+        .header {
+            padding: 10px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .jackpot-bar {
+            background: linear-gradient(90deg, #b8860b, #ffd700, #b8860b);
+            color: #000;
+            font-weight: bold;
+            border-radius: 5px;
+            padding: 5px;
+            margin: 5px 0;
+            box-shadow: 0 0 15px var(--gold);
+            font-size: 1.2rem;
+        }
+
+        .balance-box {
+            font-size: 1.5rem;
+            color: var(--gold);
+            text-shadow: 0 0 10px rgba(255,215,0,0.5);
+        }
+
+        /* Zone de Jeu (Rouleaux) */
+        .slot-machine {
+            flex-grow: 1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            padding: 10px;
+            background: rgba(0,0,0,0.4);
+            margin: 10px;
+            border-radius: 10px;
+            border: 2px solid #5a008a;
+        }
+
+        .reel {
+            background: #0d001a;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+            border: 1px solid #333;
+            overflow: hidden;
+        }
+
+        .symbol {
+            font-size: 2rem;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            transition: transform 0.1s;
+        }
+
+        /* Footer & Contrôles */
+        .footer {
+            padding: 20px;
+            background: linear-gradient(0deg, #000, transparent);
+            text-align: center;
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .bet-control {
+            background: var(--glass);
+            border: 1px solid var(--neon-pink);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            padding: 5px 15px;
+        }
+
+        .btn-mini {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+
+        .spin-button {
+            background: linear-gradient(180deg, #ff0055, #aa0033);
+            border: 3px solid #ff00ff;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 0 20px var(--neon-pink);
+            transition: transform 0.1s;
+        }
+
+        .spin-button:active {
+            transform: scale(0.9);
+        }
+
+        .spin-button:disabled {
+            filter: grayscale(1);
+            box-shadow: none;
+        }
+
+        .win-announcement {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            color: var(--gold);
+            text-shadow: 0 0 20px #000;
+            display: none;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        @keyframes blur-spin {
+            0% { filter: blur(0); }
+            50% { filter: blur(8px); transform: translateY(20px); }
+            100% { filter: blur(0); }
+        }
+
+        .spinning {
+            animation: blur-spin 0.2s infinite;
+        }
     </style>
 </head>
 <body>
 
-    <h1>🐉 DRAGON GOLD SLOT 🐉</h1>
-    
-    <div class="stats">Solde: <span id="balance">100000</span> €</div>
-
-    <div class="machine">
-        <div class="reels">
-            <div id="reel1" class="reel">🐲</div>
-            <div id="reel2" class="reel">🐲</div>
-            <div id="reel3" class="reel">🐲</div>
-        </div>
-
-        <div class="controls">
-            <div class="bet-selector">
-                Mise: 
-                <select id="betAmount">
-                    <option value="0.75">0.75 €</option>
-                    <option value="5">5.00 €</option>
-                    <option value="10">10.00 €</option>
-                    <option value="100">100.00 €</option>
-                </select>
-            </div>
-            <button id="spinBtn" onclick="spin()">LANCER !</button>
-        </div>
+<div id="game-container">
+    <div class="header">
+        <div class="balance-box">💰 <span id="balance">100,000.00</span></div>
+        <div class="jackpot-bar">GRAND JACKPOT: 2,409,276.00</div>
     </div>
 
-    <p id="message"></p>
+    <div class="win-announcement" id="win-text">BIG WIN!</div>
 
-    <script>
-        let balance = 100000;
-        const symbols = ['🐲', '💎', '🔥', '🧧', '7️⃣'];
-        const reelElements = [document.getElementById('reel1'), document.getElementById('reel2'), document.getElementById('reel3')];
+    <div class="slot-machine" id="machine">
+        </div>
 
-        function spin() {
-            const bet = parseFloat(document.getElementById('betAmount').value);
-            const message = document.getElementById('message');
-
-            if (balance < bet) {
-                message.innerText = "Solde insuffisant !";
-                return;
-            }
-
-            // Déduction de la mise
-            balance -= bet;
-            updateUI();
+    <div class="footer">
+        <div class="controls-row">
+            <div class="bet-control">
+                <button class="btn-mini" onclick="changeBet(-0.25)">-</button>
+                <div style="text-align: center; min-width: 80px;">
+                    <div style="font-size: 0.7rem; color: #aaa;">MISE</div>
+                    <div id="current-bet" style="font-weight: bold;">0.75</div>
+                </div>
+                <button class="btn-mini" onclick="changeBet(0.25)">+</button>
+            </div>
             
-            document.getElementById('spinBtn').disabled = true;
-            message.innerText = "Le dragon tourne...";
+            <button class="spin-button" id="spin-btn" onclick="playGame()">SPIN</button>
+            
+            <div style="text-align: center;">
+                <div style="font-size: 0.7rem; color: #aaa;">GAIN TOTAL</div>
+                <div id="last-win" style="font-weight: bold; color: var(--gold);">0.00</div>
+            </div>
+        </div>
+    </div>
+</div>
 
-            // Animation simple
-            let count = 0;
-            const interval = setInterval(() => {
-                reelElements.forEach(reel => {
-                    reel.innerText = symbols[Math.floor(Math.random() * symbols.length)];
-                });
-                count++;
-                if (count > 10) {
-                    clearInterval(interval);
-                    determineResult(bet);
-                }
-            }, 100);
+<script>
+    let balance = 100000.00;
+    let currentBet = 0.75;
+    const symbols = ['🐉', '💎', '🧧', '🔱', '💰', '🔥', '7️⃣'];
+    const reelCount = 5;
+    const rowCount = 3;
+
+    // Initialisation des rouleaux
+    const machine = document.getElementById('machine');
+    for (let i = 0; i < reelCount; i++) {
+        const reel = document.createElement('div');
+        reel.className = 'reel';
+        reel.id = `reel-${i}`;
+        for (let j = 0; j < rowCount; j++) {
+            const sym = document.createElement('div');
+            sym.className = 'symbol';
+            sym.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+            reel.appendChild(sym);
+        }
+        machine.appendChild(reel);
+    }
+
+    function changeBet(val) {
+        currentBet = Math.max(0.25, currentBet + val);
+        document.getElementById('current-bet').innerText = currentBet.toFixed(2);
+    }
+
+    function updateDisplay() {
+        document.getElementById('balance').innerText = balance.toLocaleString('en-US', {minimumFractionDigits: 2});
+    }
+
+    async function playGame() {
+        if (balance < currentBet) return alert("Fonds insuffisants !");
+
+        balance -= currentBet;
+        updateDisplay();
+        
+        const btn = document.getElementById('spin-btn');
+        btn.disabled = true;
+
+        // Animation des rouleaux
+        const reels = document.querySelectorAll('.reel');
+        reels.forEach((reel, index) => {
+            setTimeout(() => {
+                reel.classList.add('spinning');
+                
+                // Changer les symboles aléatoirement pendant le spin
+                let spinCount = 0;
+                const spinInterval = setInterval(() => {
+                    reel.innerHTML = '';
+                    for (let j = 0; j < rowCount; j++) {
+                        const sym = document.createElement('div');
+                        sym.className = 'symbol';
+                        sym.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+                        reel.appendChild(sym);
+                    }
+                    spinCount++;
+                    if (spinCount > 15) {
+                        clearInterval(spinInterval);
+                        reel.classList.remove('spinning');
+                        if (index === reelCount - 1) checkResults();
+                    }
+                }, 70);
+            }, index * 100); // Décalage pour effet cascade
+        });
+    }
+
+    function checkResults() {
+        // Logique simplifiée de gain (1 chance sur 5 de gagner gros)
+        const winChance = Math.random();
+        let winAmount = 0;
+        const winText = document.getElementById('win-text');
+
+        if (winChance > 0.85) { // Grosse victoire
+            winAmount = currentBet * 20;
+            winText.innerText = "BIG WIN!";
+            triggerWinEffect();
+        } else if (winChance > 0.6) { // Petite victoire
+            winAmount = currentBet * 3;
+            winText.innerText = "WIN!";
+            triggerWinEffect();
         }
 
-        function determineResult(bet) {
-            const results = reelElements.map(reel => reel.innerText);
-            const message = document.getElementById('message');
-            document.getElementById('spinBtn').disabled = false;
-
-            if (results[0] === results[1] && results[1] === results[2]) {
-                let win = bet * 10; // Gain de 10x la mise
-                balance += win;
-                message.innerHTML = `<span style="color:gold; font-size:24px;">JACKPOT ! +${win} €</span>`;
-            } else if (results[0] === results[1] || results[1] === results[2]) {
-                let win = bet * 2; // Petit gain
-                balance += win;
-                message.innerText = `Petit gain: +${win} €`;
-            } else {
-                message.innerText = "Réessayez !";
-            }
-            updateUI();
+        if (winAmount > 0) {
+            balance += winAmount;
+            document.getElementById('last-win').innerText = winAmount.toFixed(2);
+        } else {
+            document.getElementById('last-win').innerText = "0.00";
         }
 
-        function updateUI() {
-            document.getElementById('balance').innerText = balance.toFixed(2);
-        }
-    </script>
+        updateDisplay();
+        document.getElementById('spin-btn').disabled = false;
+    }
+
+    function triggerWinEffect() {
+        const winText = document.getElementById('win-text');
+        winText.style.display = 'block';
+        setTimeout(() => { winText.style.display = 'none'; }, 2000);
+    }
+</script>
+
 </body>
 </html>
