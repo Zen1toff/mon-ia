@@ -2,134 +2,109 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>World Conquest : Renaissance</title>
+    <title>World Conquest 3D</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; margin: 0; display: flex; height: 100vh; }
-        
-        /* Menu Latéral */
-        #sidebar { width: 300px; background: #2c3e50; padding: 20px; border-right: 2px solid #34495e; }
-        .stat-card { background: #34495e; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
-        .gold { color: #f1c40f; font-weight: bold; font-size: 1.2em; }
-
-        /* Zone de Jeu */
-        #main-map { flex-grow: 1; padding: 20px; overflow-y: auto; }
-        .country-card { 
-            background: #ecf0f1; color: #2c3e50; margin: 10px; padding: 15px; 
-            border-radius: 5px; display: inline-block; width: 250px; vertical-align: top;
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .panel { 
+            position: absolute; background: rgba(0, 20, 40, 0.8); border: 1px solid #00d4ff; 
+            color: #00d4ff; padding: 15px; pointer-events: auto;
         }
-        .status-player { border: 4px solid #27ae60; }
-        .status-ruin { opacity: 0.7; background: #95a5a6; }
-
-        button { 
-            background: #2980b9; color: white; border: none; padding: 8px; 
-            cursor: pointer; border-radius: 4px; margin-top: 5px; width: 100%;
-        }
-        button:hover { background: #3498db; }
-        button:disabled { background: #7f8c8d; cursor: not-allowed; }
-        
-        .log { font-size: 0.8em; color: #bdc3c7; margin-top: 20px; height: 150px; overflow-y: auto; border-top: 1px solid #7f8c8d; }
+        #stats { top: 10px; left: 10px; width: 250px; }
+        #actions { bottom: 10px; left: 50%; transform: translateX(-50%); width: 600px; display: flex; justify-content: space-around; }
+        .btn { background: #004a66; border: 1px solid #00d4ff; color: white; padding: 10px; cursor: pointer; transition: 0.3s; }
+        .btn:hover { background: #00d4ff; color: black; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
 
-    <div id="sidebar">
-        <h2>🌍 Empire Manager</h2>
-        <div class="stat-card">
-            Or: <span id="gold-display" class="gold">0</span> $<br>
-            Puissance: <span id="power-display">0</span> GW
+    <div id="ui-layer">
+        <div id="stats" class="panel">
+            <h2>🌍 EMPIRE STATUS</h2>
+            <hr>
+            OR: <span id="gold">1000</span> $<br>
+            UNITÉS: <span id="units">0</span><br>
+            NUKE: <span id="nukes">0</span>
         </div>
-        <div class="stat-card">
-            <h3>Armée</h3>
-            Soldats: <span id="army-count">0</span><br>
-            Nukes: <span id="nuke-count">0</span>
+
+        <div id="actions" class="panel">
+            <button class="btn" onclick="buyUnit()">ACHETER ARMÉE (200$)</button>
+            <button class="btn" onclick="buildNuke()">PROFIL NUCLÉAIRE (5000$)</button>
+            <button class="btn" onclick="launchInvasion()">LANCER INVASION</button>
         </div>
-        <div id="game-logs" class="log">Bienvenue, Commandant. Choisissez un pays pour restaurer sa base.</div>
     </div>
 
-    <div id="main-map">
-        <h1>Carte du Monde (Secteurs)</h1>
-        <div id="world-container"></div>
-    </div>
+    <!-- Import de Three.js -->
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
 
-<script>
-    // --- DONNÉES DU JEU ---
-    let player = {
-        gold: 1000,
-        army: 0,
-        nukes: 0,
-        power: 0,
-        ownedCountries: []
-    };
+    <script type="module">
+        import * as THREE from 'three';
 
-    const countries = [
-        { id: 0, name: "France", status: "ruin", cost: 500, goldGen: 50, power: 100 },
-        { id: 1, name: "USA", status: "ruin", cost: 2000, goldGen: 200, power: 500 },
-        { id: 2, name: "Japon", status: "ruin", cost: 1200, goldGen: 120, power: 300 },
-        { id: 3, name: "Brésil", status: "ruin", cost: 800, goldGen: 80, power: 150 },
-        { id: 4, name: "Égypte", status: "ruin", cost: 400, goldGen: 40, power: 80 }
-    ];
+        // --- CONFIGURATION SCÈNE ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-    // --- LOGIQUE ---
-
-    function initGame() {
-        const container = document.getElementById('world-container');
-        container.innerHTML = '';
+        // --- LE GLOBE ---
+        const geometry = new THREE.SphereGeometry(5, 64, 64);
+        const textureLoader = new THREE.TextureLoader();
         
-        countries.forEach(country => {
-            const card = document.createElement('div');
-            card.className = `country-card status-${country.status}`;
-            card.id = `country-${country.id}`;
-            
-            card.innerHTML = `
-                <h3>${country.name}</h3>
-                <p>État: ${country.status === 'ruin' ? '🏚️ Ruines' : '🏰 Base Active'}</p>
-                <p>Génère: ${country.goldGen}$/sec</p>
-                <button onclick="repairBase(${country.id})" id="btn-${country.id}">
-                    Restaurer (${country.cost}$)
-                </button>
-            `;
-            container.appendChild(card);
-        });
-    }
+        // Utilisation d'une texture de carte du monde (Remplace par un vrai lien d'image)
+        const earthTexture = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Blue_Marble_2002.png/2048px-Blue_Marble_2002.png');
+        const material = new THREE.MeshPhongMaterial({ map: earthTexture });
+        const earth = new THREE.Mesh(geometry, material);
+        scene.add(earth);
 
-    function repairBase(id) {
-        const country = countries[id];
-        if (player.gold >= country.cost) {
-            player.gold -= country.cost;
-            country.status = 'active';
-            player.ownedCountries.push(id);
-            player.power += country.power;
+        // --- LUMIÈRE ---
+        const light = new THREE.PointLight(0xffffff, 1.5);
+        light.position.set(10, 10, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x333333));
+
+        camera.position.z = 12;
+
+        // --- INTERACTION (SOURIS / ZOOM) ---
+        let isDragging = false;
+        let mouseX = 0, mouseY = 0;
+
+        document.addEventListener('mousedown', () => isDragging = true);
+        document.addEventListener('mouseup', () => isDragging = false);
+        document.addEventListener('mousemove', (e) => {
+            if(isDragging) {
+                earth.rotation.y += e.movementX * 0.005;
+                earth.rotation.x += e.movementY * 0.005;
+            }
+        });
+
+        document.addEventListener('wheel', (e) => {
+            camera.position.z += e.deltaY * 0.01;
+            camera.position.z = Math.max(7, Math.min(camera.position.z, 20));
+        });
+
+        // --- BOUCLE DE JEU ---
+        let gold = 1000;
+        function update() {
+            gold += 0.5; // Revenu passif
+            document.getElementById('gold').innerText = Math.floor(gold);
             
-            addLog(`Base restaurée en ${country.name} !`);
-            updateUI();
-            initGame(); // Rafraîchir la carte
-        } else {
-            addLog("Pas assez d'or !");
+            renderer.render(scene, camera);
+            requestAnimationFrame(update);
         }
-    }
+        update();
 
-    function addLog(msg) {
-        const logBox = document.getElementById('game-logs');
-        logBox.innerHTML = `<div>> ${msg}</div>` + logBox.innerHTML;
-    }
-
-    function updateUI() {
-        document.getElementById('gold-display').innerText = Math.floor(player.gold);
-        document.getElementById('power-display').innerText = player.power;
-        document.getElementById('army-count').innerText = player.army;
-        document.getElementById('nuke-count').innerText = player.nukes;
-    }
-
-    // --- BOUCLE DE GÉNÉRATION (Toutes les secondes) ---
-    setInterval(() => {
-        player.ownedCountries.forEach(id => {
-            player.gold += countries[id].goldGen / 10; // Gain passif
-        });
-        updateUI();
-    }, 100); // Mise à jour fluide
-
-    initGame();
-    updateUI();
-</script>
+        // --- GESTION DES ARMES ---
+        window.buyUnit = () => {
+            if(gold >= 200) {
+                gold -= 200;
+                // Logique pour ajouter des unités visuelles sur la carte
+                alert("Unité déployée dans vos bases !");
+            }
+        };
+    </script>
 </body>
 </html>
