@@ -2,129 +2,134 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sideswipe 3D Pro</title>
+    <title>World Conquest : Renaissance</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
-        #gui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; font-size: 24px; pointer-events: none; text-shadow: 2px 2px 4px #000; }
-        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; }
-        .btn { width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid #fff; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(5px); user-select: none; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; margin: 0; display: flex; height: 100vh; }
+        
+        /* Menu Latéral */
+        #sidebar { width: 300px; background: #2c3e50; padding: 20px; border-right: 2px solid #34495e; }
+        .stat-card { background: #34495e; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+        .gold { color: #f1c40f; font-weight: bold; font-size: 1.2em; }
+
+        /* Zone de Jeu */
+        #main-map { flex-grow: 1; padding: 20px; overflow-y: auto; }
+        .country-card { 
+            background: #ecf0f1; color: #2c3e50; margin: 10px; padding: 15px; 
+            border-radius: 5px; display: inline-block; width: 250px; vertical-align: top;
+        }
+        .status-player { border: 4px solid #27ae60; }
+        .status-ruin { opacity: 0.7; background: #95a5a6; }
+
+        button { 
+            background: #2980b9; color: white; border: none; padding: 8px; 
+            cursor: pointer; border-radius: 4px; margin-top: 5px; width: 100%;
+        }
+        button:hover { background: #3498db; }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; }
+        
+        .log { font-size: 0.8em; color: #bdc3c7; margin-top: 20px; height: 150px; overflow-y: auto; border-top: 1px solid #7f8c8d; }
     </style>
 </head>
 <body>
 
-<div id="gui">SCORE: <span id="s1">0</span> - <span id="s2">0</span></div>
-<div id="controls">
-    <div class="btn" id="btn-left">←</div>
-    <div class="btn" id="btn-jump">JUMP</div>
-    <div class="btn" id="btn-boost" style="background: orange;">BOOST</div>
-    <div class="btn" id="btn-right">→</div>
-</div>
+    <div id="sidebar">
+        <h2>🌍 Empire Manager</h2>
+        <div class="stat-card">
+            Or: <span id="gold-display" class="gold">0</span> $<br>
+            Puissance: <span id="power-display">0</span> GW
+        </div>
+        <div class="stat-card">
+            <h3>Armée</h3>
+            Soldats: <span id="army-count">0</span><br>
+            Nukes: <span id="nuke-count">0</span>
+        </div>
+        <div id="game-logs" class="log">Bienvenue, Commandant. Choisissez un pays pour restaurer sa base.</div>
+    </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <div id="main-map">
+        <h1>Carte du Monde (Secteurs)</h1>
+        <div id="world-container"></div>
+    </div>
 
 <script>
-/** --- INITIALISATION PHYSIQUE (CANNON.JS) --- **/
-const world = new CANNON.World();
-world.gravity.set(0, -15, 0); // Gravité Sideswipe
+    // --- DONNÉES DU JEU ---
+    let player = {
+        gold: 1000,
+        army: 0,
+        nukes: 0,
+        power: 0,
+        ownedCountries: []
+    };
 
-/** --- INITIALISATION RENDU (THREE.JS) --- **/
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x111122);
-document.body.appendChild(renderer.domElement);
+    const countries = [
+        { id: 0, name: "France", status: "ruin", cost: 500, goldGen: 50, power: 100 },
+        { id: 1, name: "USA", status: "ruin", cost: 2000, goldGen: 200, power: 500 },
+        { id: 2, name: "Japon", status: "ruin", cost: 1200, goldGen: 120, power: 300 },
+        { id: 3, name: "Brésil", status: "ruin", cost: 800, goldGen: 80, power: 150 },
+        { id: 4, name: "Égypte", status: "ruin", cost: 400, goldGen: 40, power: 80 }
+    ];
 
-// Lumières
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambientLight);
-const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.position.set(10, 20, 10);
-scene.add(sun);
+    // --- LOGIQUE ---
 
-/** --- LE TERRAIN (STADE) --- **/
-const arenaSize = { w: 60, h: 30, d: 2 };
-const groundMat = new THREE.MeshPhongMaterial({ color: 0x228822, emissive: 0x001100 });
-const groundGeo = new THREE.BoxGeometry(arenaSize.w, 1, arenaSize.d);
-const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-scene.add(groundMesh);
-
-const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(30, 0.5, 1)) });
-world.addBody(groundBody);
-
-/** --- LA BALLE 3D --- **/
-const ballRadius = 1.5;
-const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
-const ballMat = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 100 });
-const ballMesh = new THREE.Mesh(ballGeo, ballMat);
-scene.add(ballMesh);
-
-const ballBody = new CANNON.Body({
-    mass: 1,
-    shape: new CANNON.Sphere(ballRadius),
-    material: new CANNON.Material({ restitution: 0.9 }) // Rebond Sideswipe
-});
-ballBody.position.set(0, 10, 0);
-world.addBody(ballBody);
-
-/** --- LA VOITURE --- **/
-const carGeo = new THREE.BoxGeometry(3, 1.2, 1.8);
-const carMat = new THREE.MeshPhongMaterial({ color: 0x0077ff });
-const carMesh = new THREE.Mesh(carGeo, carMat);
-scene.add(carMesh);
-
-const carBody = new CANNON.Body({
-    mass: 2,
-    shape: new CANNON.Box(new CANNON.Vec3(1.5, 0.6, 0.9))
-});
-carBody.position.set(-15, 2, 0);
-world.addBody(carBody);
-
-/** --- CONTRÔLES --- **/
-const input = { left: false, right: false, boost: false };
-document.getElementById('btn-left').ontouchstart = () => input.left = true;
-document.getElementById('btn-left').ontouchend = () => input.left = false;
-document.getElementById('btn-right').ontouchstart = () => input.right = true;
-document.getElementById('btn-right').ontouchend = () => input.right = false;
-document.getElementById('btn-boost').ontouchstart = () => input.boost = true;
-document.getElementById('btn-boost').ontouchend = () => input.boost = false;
-document.getElementById('btn-jump').onclick = () => {
-    carBody.applyImpulse(new CANNON.Vec3(0, 15, 0), carBody.position);
-};
-
-/** --- BOUCLE DE JEU --- **/
-camera.position.z = 25;
-camera.position.y = 8;
-
-function animate() {
-    requestAnimationFrame(animate);
-    world.step(1/60);
-
-    // Mouvement voiture
-    if(input.left) carBody.velocity.x = -15;
-    else if(input.right) carBody.velocity.x = 15;
-    else carBody.velocity.x *= 0.95;
-
-    if(input.boost) {
-        carBody.applyForce(new CANNON.Vec3(input.right ? 40 : -40, 20, 0), carBody.position);
+    function initGame() {
+        const container = document.getElementById('world-container');
+        container.innerHTML = '';
+        
+        countries.forEach(country => {
+            const card = document.createElement('div');
+            card.className = `country-card status-${country.status}`;
+            card.id = `country-${country.id}`;
+            
+            card.innerHTML = `
+                <h3>${country.name}</h3>
+                <p>État: ${country.status === 'ruin' ? '🏚️ Ruines' : '🏰 Base Active'}</p>
+                <p>Génère: ${country.goldGen}$/sec</p>
+                <button onclick="repairBase(${country.id})" id="btn-${country.id}">
+                    Restaurer (${country.cost}$)
+                </button>
+            `;
+            container.appendChild(card);
+        });
     }
 
-    // Stabilisation (empêcher la voiture de sortir du plan Z)
-    carBody.position.z = 0;
-    ballBody.position.z = 0;
+    function repairBase(id) {
+        const country = countries[id];
+        if (player.gold >= country.cost) {
+            player.gold -= country.cost;
+            country.status = 'active';
+            player.ownedCountries.push(id);
+            player.power += country.power;
+            
+            addLog(`Base restaurée en ${country.name} !`);
+            updateUI();
+            initGame(); // Rafraîchir la carte
+        } else {
+            addLog("Pas assez d'or !");
+        }
+    }
 
-    // Sync Three.js avec Cannon.js
-    carMesh.position.copy(carBody.position);
-    carMesh.quaternion.copy(carBody.quaternion);
-    ballMesh.position.copy(ballBody.position);
-    ballMesh.quaternion.copy(ballBody.quaternion);
+    function addLog(msg) {
+        const logBox = document.getElementById('game-logs');
+        logBox.innerHTML = `<div>> ${msg}</div>` + logBox.innerHTML;
+    }
 
-    renderer.render(scene, camera);
-}
+    function updateUI() {
+        document.getElementById('gold-display').innerText = Math.floor(player.gold);
+        document.getElementById('power-display').innerText = player.power;
+        document.getElementById('army-count').innerText = player.army;
+        document.getElementById('nuke-count').innerText = player.nukes;
+    }
 
-animate();
+    // --- BOUCLE DE GÉNÉRATION (Toutes les secondes) ---
+    setInterval(() => {
+        player.ownedCountries.forEach(id => {
+            player.gold += countries[id].goldGen / 10; // Gain passif
+        });
+        updateUI();
+    }, 100); // Mise à jour fluide
+
+    initGame();
+    updateUI();
 </script>
 </body>
 </html>
